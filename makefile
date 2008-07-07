@@ -1,3 +1,7 @@
+# Makefile
+# Copyright (C) 2008 Loren B. Davis.
+# Released under the LGPL, version 3.  See COPYING.
+
 CC = c99 -I include
 DEBUGFLAGS = -Wall -g
 PRODUCTIONFLAGS = -Wall -O3
