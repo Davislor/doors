@@ -235,7 +235,7 @@ static struct door_data** init_door_table(void)
  * unreasonable number of entries to allocate.  Allocating more than 
  * {OPEN_MAX} entries wastes space.
  */
-		if ( (0 > sys) || ((long)open_default < sys) )
+		if ( (0 >= sys) || ((long)open_default < sys) )
 			open_max = open_default;
 		else
 			open_max = (size_t)sys;
@@ -285,7 +285,7 @@ static struct door_data** resize_door_table( int did )
 		assert( sys > did );
 
 /* Allocating more than {OPEN_MAX} entries wastes space. */
-		if ( (0 > sys) || (guess < (size_t)sys) )
+		if ( (0 >= sys) || (guess < (size_t)sys) )
 			new_max = guess;
 		else
 			new_max = (size_t)sys;
@@ -403,12 +403,12 @@ int door_attach ( int d, const char* path )
 
 	address.sun_family = AF_UNIX;
 
-/* Using strncpy and an explicit terminator are redundant, individually and
- * together, unless the data change from under us.  In that case, we're 
- * already in a state of mortal sin.  I do it anyway, as the cost is 
- * well worth making a buffer overrun impossible.
+/* Using memcpy and an explicit terminator are redundant, individually
+ * and together, unless the data change from under us.  In that case,
+ * we're already in a state of mortal sin.  I do it anyway, as the cost
+ * is well worth making a buffer overrun impossible.
  */
-	strncpy( address.sun_path, path, path_len );
+	memcpy( address.sun_path, path, path_len );
 	address.sun_path[path_len] = '\0';
 
 	old_umask = umask( S_IRWXU | S_IRWXG | S_IRWXO );
@@ -501,6 +501,9 @@ int door_create(
 		return ERROR;
 	}
 
+/* It makes no sense to keep a door open after exec(), as even if the
+ * new program is also a door server, it won't know about this door.
+ */
 	if ( 0 != fcntl( did, F_SETFL, FD_CLOEXEC ) ) {
 		close(did);
 		return ERROR;
