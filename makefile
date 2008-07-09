@@ -3,11 +3,11 @@
 # Released under the LGPL, version 3.  See COPYING.
 
 CC = c99 -I include
-DEBUGFLAGS = -Wall -g
-PRODUCTIONFLAGS = -Wall -O3
+DEBUGFLAGS = -g
+PRODUCTIONFLAGS = -O3
 
 # On Sun C, set CFLAGS to include -xtarget=native64 -mt
-# On GCC, set CFLAGS to include -std=c99 -m64 -pedantic
+# On GCC, set CFLAGS to include -std=c99 -m64 -Wall -pedantic
 # On Linux, link with -pthread.
 # On Solaris, link with -lpthread -lsocket
 

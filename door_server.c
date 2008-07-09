@@ -37,8 +37,7 @@ static const size_t open_default = 1024U;
 /* Converted into a 64-bit unsigned integer, and thence into an unsigned
  * long long, by door_info().
  */
-typedef void (*server_proc_t) (void*, char*, size_t, door_desc_t*, 
-uint_t);
+typedef void (*server_proc_t) (void*, char*, size_t, door_desc_t*, uint_t);
 
 /* Several functions manipulate the door_table, which is an array of 
  * OPEN_MAX door_data structures.  A file descriptor fd refers to a 
@@ -61,7 +60,11 @@ struct door_data {
 	size_t		data_max;	/* Maximum length of input */
 };
 
-static struct door_data* door_table = NULL;
+/* The door table is an array of pointers to door_data structures.  A
+ * non-NULL value of door_table[d] means that d is a local door with
+ * heap-allocated data.
+ */
+static struct door_data** door_table = NULL;
 
 /* A thread which attempts to create, resize, destroy or move door_table 
  * must hold the following lock in exclusive mode.  One which attempts 
@@ -115,8 +118,10 @@ static void child_fork_handler(void)
  * we skip over most of it.
  */
 		for ( i = 0; i < open_max; ++i )
-			if (door_table[i].target)
+			if ( door_table[i] ) {
+				free(door_table[i]);
 				close(i);
+			}
 
 		free(door_table);
 		door_table = NULL;
@@ -194,7 +199,7 @@ static door_id_t get_unique_id (void)
 	return id;
 }
 
-static struct door_data* init_door_table(void)
+static struct door_data** init_door_table(void)
 /* Initializes door_table, setting all of its bits to zero.  If the 
  * value of {OPEN_MAX}, as reported by sysconf(), is more than 0 but 
  * less than 1,024, door_table has {OPEN_MAX} entries.  Otherwise, it 
@@ -212,6 +217,7 @@ static struct door_data* init_door_table(void)
  */
 {
 	long sys;
+	size_t i;
 
 	if ( 0 != pthread_rwlock_wrlock(&door_table_lock) )
 		fatal_system_error(__FILE__, __LINE__, "pthread_rwlock_wrlock");
@@ -233,7 +239,13 @@ static struct door_data* init_door_table(void)
 		else
 			open_max = (size_t)sys;
 
-		door_table = calloc( open_max, sizeof(struct door_data) ); 
+		door_table =
+(struct door_data**)malloc( open_max * sizeof(struct door_data*) );
+
+		if (door_table)
+			for ( i = 0; i < open_max; ++i )
+				door_table[i] = NULL;
+
 	} /* end if (!door_table) */
 
 /* We must release this lock unconditionally: */
@@ -243,7 +255,7 @@ static struct door_data* init_door_table(void)
 	return door_table;
 }
 
-static struct door_data* resize_door_table( int did )
+static struct door_data** resize_door_table( int did )
 /* Resize door_table to have at least did entries.
  *
  * The implementation finds a new size greater than or equal to did, 
@@ -255,7 +267,7 @@ static struct door_data* resize_door_table( int did )
  * failed.
  */
 {
-	size_t guess, new_max;
+	size_t i, guess, new_max;
 	long sys;
 
 	if ( 0 != pthread_rwlock_wrlock(&door_table_lock) )
@@ -281,15 +293,13 @@ static struct door_data* resize_door_table( int did )
  * sys > did.  We checked earlier that open_max <= did.  Therefore, 
  * new_max > did >= open_max.
  */
-		door_table =
-realloc( door_table, new_max * sizeof(struct door_data) );
+		door_table = (struct door_data**)
+realloc( door_table, new_max * sizeof(struct door_data*) );
 
 /* The implementation depends on empty entries being zeroed out. */
 		if (door_table) {
-			memset( door_table + open_max,
-			        0,
-	        		sizeof(struct door_data) * (new_max - open_max)
-		      	);
+			for ( i = open_max; i < new_max; ++i )
+				door_table[i] = NULL;
 
 			open_max = new_max;
 		} /* end if (door_table) */
@@ -445,6 +455,7 @@ int door_create(
 	int default_buf;	/* Used by getsockopt() */
 /* Used by getsockopt(): */
 	socklen_t int_length = sizeof(int);
+	struct door_data* p;	/* Holds the new table entry. */
 
 	if (
 (NULL == server_procedure) || (attributes & UNRECOGNIZED)
@@ -496,17 +507,24 @@ int door_create(
  * Do not attempt to use the door until door_create() has returned, or 
  * we may have a race!
  */
+	p = calloc( 1, sizeof(struct door_data) );
+	if ( NULL == p ) {
+		close(did);
+		errno = ENOMEM;
+		return ERROR;
+	}
+
 	lock_door_table();
-
-	door_table[did].target = getpid();
-	door_table[did].server_proc = server_procedure;
-	door_table[did].cookie = cookie;
-	door_table[did].attr = attributes;
-	door_table[did].id = get_unique_id();
-	door_table[did].data_min = 0;
-	door_table[did].data_max = (size_t)default_buf;
-
+	door_table[did] = p;
 	unlock_door_table();
+
+	p->target = getpid();
+	p->server_proc = server_procedure;
+	p->cookie = cookie;
+	p->attr = attributes;
+	p->id = get_unique_id();
+	p->data_min = 0;
+	p->data_max = (size_t)default_buf;
 
 	return did;
 }
@@ -573,30 +591,33 @@ int door_getparam (int d, int param, size_t* out)
 	static const int ERROR = -1;
 	static const int SUCCESS = 0;
 
+	const struct door_data* p;
+
 	if ( NULL == out ) {
 		errno = EINVAL;
 		return ERROR;
 	}
 
 	lock_door_table();
+	p = door_table[d];
+	unlock_door_table();
 
 	if ( ( NULL == door_table ) ||
 	     ( d >= open_max ) ||
 	     ( 0 > d ) ||
-	     ( 0 == door_table[d].target )
+	     ( NULL == p )
 	   ) {
 		errno = EBADF;
-		unlock_door_table();
 		return ERROR;
 	}
 
 	switch (param) {
 		case DOOR_PARAM_DATA_MAX:
-			*out = door_table[d].data_max;
+			*out = p->data_max;
 			break;
 
 		case DOOR_PARAM_DATA_MIN:
-			*out = door_table[d].data_min;
+			*out = p->data_min;
 			break;
 
 		case DOOR_PARAM_DESC_MAX:
@@ -605,11 +626,9 @@ int door_getparam (int d, int param, size_t* out)
 
 		default:
 			errno = EINVAL;
-			unlock_door_table();
 			return ERROR;
  	}
 
-	unlock_door_table();
 	return SUCCESS;
 }
 
@@ -625,6 +644,7 @@ int door_info (int d, struct door_info* info)
 
 /* Hope (and assert) that this holds a function pointer: */
 	uintptr_t scratch;
+	const struct door_data* p;
 
 	if ( NULL == info ) {
 		errno = EINVAL;
@@ -632,42 +652,36 @@ int door_info (int d, struct door_info* info)
 	}
 
 	lock_door_table();
+	p = door_table[d];
+	unlock_door_table();
 
 	if ( ( NULL == door_table ) ||
 	     ( open_max <= d ) ||
 	     ( 0 > d ) ||
-	     ( 0 == door_table[d].target )
+	     ( NULL == p )
 	   ) {
 /* Not a local door. */
 		errno = EBADF;
-		unlock_door_table();
 		return ERROR;
 	}
 
-	info->di_target = door_table[d].target;
-
-/* We use preprocessor #warnings to check that both function and object 
- * pointers are no larger than 8 bytes.  The standard guarantees that 
- * long long int is at least 64 bits wide.  Could sanity-check that 
- * we're using 8-bit bytes, but for what purpose?
- */
+	info->di_target = p->target;
 
 /* Function pointer casts are not explicitly permitted, so use memcpy().
  */
 	assert( sizeof(uintptr_t) == sizeof(server_proc_t) );
 	memcpy( &scratch,
-	        &door_table[d].server_proc, 
+	        &(p->server_proc),
 	        sizeof(server_proc_t)
 	      );
 	info->di_proc = (door_ptr_t)scratch;
 
 /* On the other hand, pointers to void do convert to integral types. */
-	info->di_data = (door_ptr_t)door_table[d].cookie;
+	info->di_data = (door_ptr_t)(p->cookie);
 
-	info->di_attributes = door_table[d].attr | DOOR_LOCAL;
-	info->di_uniquifier = door_table[d].id;
+	info->di_attributes = p->attr | DOOR_LOCAL;
+	info->di_uniquifier = p->id;
 
-	unlock_door_table();
 	return SUCCESS;
 }
 
@@ -692,23 +706,19 @@ int door_revoke (int d)
 	if ( ( NULL == door_table ) ||
 	     ( open_max <= d ) ||
 	     ( 0 > d ) ||
-	     ( 0 == door_table[d].target )
+	     ( NULL == door_table[d] )
 	   ) {
 		errno = EBADF;
 		unlock_door_table();
 		return ERROR;
 	}
 
-	if ( 0 == door_table[d].target ) {
-		errno = EPERM;
-		unlock_door_table();
-		return ERROR;
-	}
-
-	door_table[d].target = 0;
-	door_table[d].attr |= DOOR_REVOKED;
-
+	free(door_table[d]);
+	door_table[d] = NULL;
 	unlock_door_table();
+
+	close(d);
+
 	return SUCCESS;
 }
 
@@ -726,16 +736,18 @@ int door_setparam ( int d, int param, size_t val )
 	static const int SUCCESS = 0;
 
 	int scratch;	/* Used by setsockopt() */
+	struct door_data* p;
 
 	lock_door_table();
+	p = door_table[d];
+	unlock_door_table();
 
 	if ( ( NULL == door_table ) ||
 	     ( d >= open_max ) ||
 	     ( 0 > d ) ||
-	     ( 0 == door_table[d].target )
+	     ( NULL == p )
 	   ) {
 		errno = EBADF;
-		unlock_door_table();
 		return ERROR;
 	}
 
@@ -744,15 +756,13 @@ int door_setparam ( int d, int param, size_t val )
  * take care to leave the door in a callable state after each step.
  */
 		case DOOR_PARAM_DATA_MAX:
-			if ( val < door_table[d].data_min ) {
+			if ( val < p->data_min ) {
 				errno = EINVAL;
-				unlock_door_table();
 				return ERROR;
 			}
 
 			if ( INT_MAX < val ) {
 				errno = ERANGE;
-				unlock_door_table();
 				return ERROR;
 			}
 
@@ -761,21 +771,18 @@ int door_setparam ( int d, int param, size_t val )
 			if (
 0 != setsockopt( d, SOL_SOCKET, SO_RCVBUF, &scratch, sizeof(int) )
 			   ) {
-				unlock_door_table();
 				return ERROR;
 			}
 
-			door_table[d].data_max = val;
-
+			p->data_max = val;
 			break;
 
 		case DOOR_PARAM_DATA_MIN:
-			if ( val > door_table[d].data_max ) {
+			if ( val > p->data_max ) {
 				errno = EINVAL;
-				unlock_door_table();
 				return ERROR;
 			}
-			door_table[d].data_min = val;
+			p->data_min = val;
 			break;
 
 		case DOOR_PARAM_DESC_MAX:
@@ -784,12 +791,11 @@ int door_setparam ( int d, int param, size_t val )
  * just don't support the option yet.
  */
 			if ( val > 0 ) {
-				if (DOOR_REFUSE_DESC | door_table[d].attr)
+				if (DOOR_REFUSE_DESC | p->attr)
 					errno = ENOTSUP;
 				else
 					errno = ERANGE;
 
-				unlock_door_table();
 				return ERROR;
 			}
 			break;
@@ -798,10 +804,8 @@ int door_setparam ( int d, int param, size_t val )
  */
 		default:
 			errno = EINVAL;
-			unlock_door_table();
 			return ERROR;
 	}
 
-	unlock_door_table();
 	return SUCCESS;
 }
