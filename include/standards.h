@@ -1,5 +1,5 @@
 /***************************************************************************
- * Doors/Linux                                                             *
+ * Portland Doors                                                          *
  * standards.h:  Feature-test macros and configuration options.            *
  *               Include this file in every source file above any other    *
  *               header inclusions, as it may alter definitions in the     *

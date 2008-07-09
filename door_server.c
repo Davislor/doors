@@ -1,6 +1,5 @@
 /***************************************************************************
- * Doors/Linux                                                             *
- *                                                                         *
+ * Portland Doors                                                          *
  * door_server.c: Server data structures and functions requiring           *
  *                knowledge thereof: door_create, door_revoke, door_info.  *
  *                                                                         *
@@ -29,6 +28,7 @@
 
 #include "door.h"
 #include "error.h"
+#include "messages.h"
 
 /* The default size of door_table, used unless {OPEN_MAX} is a lower, 
  * positive number.
@@ -533,7 +533,7 @@ int door_create(
 	p->attr = attributes;
 	p->id = get_unique_id();
 	p->data_min = 0;
-	p->data_max = (size_t)default_buf;
+	p->data_max = (size_t)default_buf - DOOR_CALL_RESERVED;
 
 	return did;
 }
@@ -775,7 +775,7 @@ int door_setparam ( int d, int param, size_t val )
 				return ERROR;
 			}
 
-			scratch = (int)val;
+			scratch = (int)val + DOOR_CALL_RESERVED;
 
 			if (
 0 != setsockopt( d, SOL_SOCKET, SO_RCVBUF, &scratch, sizeof(int) )

@@ -1,5 +1,5 @@
 /***************************************************************************
- * Doors/Linux                                                             *
+ * Portland Doors                                                          *
  * door.h: Include file for the Doors library.                             *
  *         This file exposes the Doors interfaces to client code.  It does *
  *         not currently include any feature-test macros, as it shouldn't  * 
@@ -82,6 +82,7 @@ typedef struct door_arg_t	door_arg_t;
 
 typedef void (* _door_thread_proc) ();
 
+/* Status flags: */
 #define DOOR_UNREF		0x001
 #define DOOR_UNREF_MULTI	0x002
 #define DOOR_PRIVATE		0x004
@@ -89,9 +90,11 @@ typedef void (* _door_thread_proc) ();
 #define DOOR_NO_CANCEL		0x010
 #define DOOR_LOCAL		0x020
 #define DOOR_REVOKED		0x040
-#define DOOR_PARAM_DATA_MAX	0x080
-#define DOOR_PARAM_DATA_MIN	0x100
-#define DOOR_PARAM_DESC_MAX	0x200
+
+/* Parameters for door_setparam() and door_getparam(): */
+#define DOOR_PARAM_DATA_MAX	0x001
+#define DOOR_PARAM_DATA_MIN	0x002
+#define DOOR_PARAM_DESC_MAX	0x003
 
 /* Currently unimplemented. */
 extern int door_bind(int did);
@@ -139,27 +142,31 @@ extern int door_ucred(ucred_t **info);
 /* Currently unimplemented. */
 extern int door_unbind(void);
 
-/* Currently, I use door_attach() and door_detach() in place of 
- * fattach() and fdetach().  The reason for this departure from the 
- * existing API is substantially different semantics.  Since programs 
- * calling fattach() and fdetach() need updating anyway, changing the 
- * interface guarantees that it will happen.  If you created an empty 
- * temporary file as the argument to fattach(), you should remove or 
- * comment out the code creating it and checking that nothing else is 
- * attached to it.  If you were masking an existing file, and counting 
- * on fdetach() to restore it intact, this will no longer work with 
- * door_detach().  Even more importantly: you must not call 
- * door_detach() on a mount point as a precautionary measure, the way 
- * you could with fdetach().  Doors do not have mount points in this 
- * implementation (although it makes its best effort to check for this 
+/* Currently, I use door_attach() and door_detach() in place of
+ * fattach() and fdetach().  The reason for this departure from the
+ * existing API is substantially different semantics.  Since programs
+ * calling fattach() and fdetach() need updating anyway, changing the
+ * interface guarantees that it will happen.  If you created an empty
+ * temporary file as the argument to fattach(), you should remove or
+ * comment out the code creating it and checking that nothing else is
+ * attached to it.  If you were masking an existing file, and counting
+ * on fdetach() to restore it intact, this will no longer work with
+ * door_detach().  Even more importantly: you must not call
+ * door_detach() on a mount point as a precautionary measure, the way
+ * you could with fdetach().  Doors do not have mount points in this
+ * implementation (although it makes its best effort to check for this
  * error and not destroy data).
  *
- * Therefore, door_attach() has identical syntax to fattach(), but 
- * requires that no file exist at that path.  The door_detach() function 
- * has identical syntax to fdetach(), but removes the attached door.  
- * Calling either on anything but a door causes undefined behavior, 
- * although the implementation makes its best effort to detect this and 
+ * Therefore, door_attach() has identical syntax to fattach(), but
+ * requires that no file exist at that path.  The door_detach() function
+ * has identical syntax to fdetach(), but removes the attached door.
+ * Calling either on anything but a door causes undefined behavior,
+ * although the implementation makes its best effort to detect this and
  * fail gracefully.
+ *
+ * The door_attach() function creates a door that no one can use; follow
+ * it with a call such as chmod().  It temporarily modifies the umask,
+ * and so is not thread-safe in that respect.
  */
 extern int door_attach ( int d, const char* path );
 

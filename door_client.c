@@ -1,5 +1,5 @@
 /***************************************************************************
- * Doors/Linux                                                             *
+ * Portland Doors                                                          *
  * door_client.c: Implements parts of the library that do not depend on    *
  *                details of the internal implementation.                  * 
  *                                                                         *
@@ -7,3 +7,8 @@
  * Loren B. Davis.  Based on work by Jason Lango.                          *
  ***************************************************************************/
 
+#include "standards.h"
+
+#include "door.h"
+#include "error.h"
+#include "messages.h"

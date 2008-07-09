@@ -39,7 +39,8 @@ error1.o: test/error1.c include/door.h include/standards.h include/error.h
 error.o: error.c include/error.h
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c error.c
 
-door_server.o: door_server.c include/door.h include/error.h include/standards.h
+door_server.o: door_server.c include/door.h include/error.h \
+include/standards.h include/messages.h
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c door_server.c
 
 localserver1: localserver1.o door_server.o error.o

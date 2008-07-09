@@ -1,5 +1,5 @@
 /***************************************************************************
- * Doors/Linux                                                             *
+ * Portland Doors                                                          *
  * error.c: Error-handling functions.                                      *
  *                                                                         *
  * Released under the LGPL version 3 (see COPYING).  Copyright (C) 2008    *

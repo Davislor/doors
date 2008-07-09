@@ -1,0 +1,64 @@
+Portland Doors Alpha Version
+Message Formats
+
+Copyright (C) 2008 Loren B. Davis.  Released under the LGPL, version 3
+(see COPYING).
+
+In the current, alpha version, doors are sockets, and communicate
+between processes by message passing.  This document defines the format
+of those messages.
+
+All offsets are in hex, and each field has one of the following types:
+int8, uint8, int16, uint16, int32, uint32, int64 or uint64.  Since all
+communication is between processes on the same machine, fields are in
+native byte order.
+
+I have attempted to align all 16-bit fields on two-byte boundaries,
+32-bit fields on four-byte boundaries and 64-bit fields on eight-byte
+boundaries, as some machines may require this.
+
+Type 0: Error message.
+0x00-0x01	uint16	Reserved (must be 0)
+0x02-0x03	uint16	0 (Error message)
+0x04-0x07	int32	Errno (error code)
+
+Type 1: Request information
+0x00-0x01	uint16	Reserved (must be 0)
+0x02-0x03	uint16	1 (Request information)
+0x04-0x07	uint32	Type of information requested:
+			0 (door_info)
+			1 (data_max)
+			2 (data_min)
+			3 (desc_max)
+
+Type 2: Return door_info information
+0x00-0x01	uint16	Reserved (must be 0)
+0x02-0x03	uint16	2 (Return door_info information)
+0x04-0x07	uint32	Door attributes
+0x08-0x0F	uint64	Server PID
+0x10-0x17	uint64	Server procedure (unspecified format)
+0x18-0x1f	uint64	Cookie
+0x20-0x27	uint64	System-wide unique identifier
+
+Type 3: Return parameter
+0x00-0x01	uint16	Reserved (must be 0)
+0x02-0x03	uint16	3 (Return parameter)
+0x04-0x07	uint32	Parameter returned:
+			1 (data_max)
+			2 (data_min)
+			3 (desc_max)
+0x08-0x0F	uint64	Parameter value
+
+Type 4: Door call
+0x00-0x01	uint16	Reserved (must be 0)
+0x02-0x03	uint16	4 (Door call)
+0x04-0x07	uint32	Number of file descriptors passed
+0x08-0x0F	uint64	Size of argument data
+0x10-    	uint8	Argument data
+
+Type 5: Door return
+0x00-0x01	uint16	Reserved (must be 0)
+0x02-0x03	uint16	5 (Door return)
+0x04-0x07	uint32	Number of file descriptors passed
+0x08-0x0F	uint64	Size of return data
+0x10-    	uint8	Argument data
