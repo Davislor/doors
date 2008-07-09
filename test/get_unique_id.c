@@ -6,7 +6,6 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "door_info.h"
 #include "door.h"
 #include "error.h"
 
