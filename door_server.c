@@ -12,6 +12,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <pthread.h>
 #include <stddef.h>
@@ -496,6 +497,11 @@ int door_create(
 	                      &int_length
 	                    )
 	   ) {
+		close(did);
+		return ERROR;
+	}
+
+	if ( 0 != fcntl( did, F_SETFL, FD_CLOEXEC ) ) {
 		close(did);
 		return ERROR;
 	}
