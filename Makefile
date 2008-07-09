@@ -11,10 +11,7 @@ PRODUCTIONFLAGS = -O3
 # On Linux, set LDFLAGS to -pthread
 # On Solaris, set LDFLAGS to -lpthread -lsocket
 
-clean:
-	rm localserver1.o localserver1 localserver2.o localserver2 \
-sun1.o sun1 sun2.o sun2 error1.o error1 door_server.o error.o \
-door_client.o get_unique_id.o get_unique_id
+all: error1 localserver1 localserver2 get_unique_id
 
 tests: sun1 error1 localserver1 localserver2 sun2 get_unique_id
 
@@ -37,7 +34,7 @@ error1: error.o error1.o
 error1.o
 
 error1.o: test/error1.c include/door.h include/standards.h include/error.h
-	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c test/error1.o
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c test/error1.c
 
 error.o: error.c include/error.h
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c error.c
@@ -59,4 +56,9 @@ localserver2.o door_server.o error.o
 
 localserver2.o: test/localserver1.c include/door.h include/error.h include/standards.h
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c test/localserver2.c
+
+clean:
+	-rm -f localserver1.o localserver1 localserver2.o localserver2 \
+sun1.o sun1 sun2.o sun2 error1.o error1 door_server.o error.o \
+door_client.o get_unique_id.o get_unique_id
 
