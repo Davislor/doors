@@ -1,7 +1,7 @@
 /***************************************************************************
  * Portland Doors                                                          *
  * door_server.c: Server data structures and functions requiring           *
- *                knowledge thereof: door_create, door_revoke, door_info.  *
+ *                knowledge thereof.                                       *
  *                                                                         *
  * Released under the LGPL version 3 (see COPYING).  Copyright (C) 2008    *
  * Loren B. Davis.  Based on work by Jason Lango.                          *
@@ -380,6 +380,7 @@ int door_attach ( int d, const char* path )
  * FIXME: Document errno values.
  */
 {
+	static const int SUCCESS = 0;
 	static const int ERROR = -1;
 	mode_t old_umask;		/* Used by umask() */
 
@@ -411,20 +412,70 @@ int door_attach ( int d, const char* path )
 	memcpy( address.sun_path, path, path_len );
 	address.sun_path[path_len] = '\0';
 
+/* FIXME: restore this!
 	old_umask = umask( S_IRWXU | S_IRWXG | S_IRWXO );
+ */
 
 	if ( 0 != bind( d,
 	                (const struct sockaddr*)&address,
 	                offsetof( struct sockaddr_un, sun_path ) + path_len
 	              )
 	   ) {
+/* FIXME: restore this!
 		umask(old_umask);
+ */
+		return ERROR;
+	}
+/* FIXME: restore this!
+	umask(old_umask);
+ */
+
+/* FIXME: Remove this! */
+	chmod( path, S_IRUSR | S_IWUSR );
+
+/* FIXME: have a thread poll() or select() on local doors.
+ *	return listen( d, SOMAXCONN );
+ */
+
+	if ( 0 != listen( d, SOMAXCONN ) )
+		return ERROR;
+
+	int endpoint;
+	struct msg_request incoming;
+
+	endpoint = accept( d, NULL, NULL );
+
+	if ( 0 > endpoint ) {
 		return ERROR;
 	}
 
-	umask(old_umask);
+	recv( endpoint, &incoming, sizeof(incoming), 0 );
 
-	return listen( d, SOMAXCONN );
+	if ( ! is_msg_request(&incoming) || 
+	     REQ_DOOR_INFO != msg_request_decode(&incoming)
+	   ) {
+		struct msg_error outgoing;
+
+		msg_error_init( &outgoing, EINVAL );
+		send( endpoint, &outgoing, sizeof(outgoing), MSG_EOR );
+	}
+	else {
+		struct msg_door_info outgoing;
+		const struct door_data* p = door_table[d];
+
+		msg_door_info_init( &outgoing,
+		                    p->target,
+		                    p->server_proc,
+		                    p->cookie,
+		                    p->attr,
+		                    p->id
+		                  );
+
+		send( endpoint, &outgoing, sizeof(outgoing), MSG_EOR );
+	}
+
+	close(endpoint);
+	return SUCCESS;
 }
 
 int door_create(
@@ -670,8 +721,35 @@ int door_info (int d, struct door_info* info)
 	     ( NULL == p )
 	   ) {
 /* Not a local door. */
-		errno = EBADF;
-		return ERROR;
+		struct msg_request outgoing;
+		struct msg_door_info incoming;
+
+		msg_request_init( &outgoing, REQ_DOOR_INFO );
+		if ( 0 > send( d, &outgoing, sizeof(outgoing), MSG_EOR ) )
+			return ERROR;
+
+		if ( 0 > recv( d, &incoming, sizeof(incoming), 0 ) )		
+			return ERROR;
+
+		if ( is_msg_door_info(&incoming) ) {
+			msg_door_info_decode( &incoming, info );
+
+			if ( getpid() == (pid_t)info->di_target )
+				info->di_attributes |= DOOR_LOCAL;
+
+			return SUCCESS;
+		}
+		else if (
+is_msg_error((const struct msg_error*)&incoming)
+		        ) {
+			errno =
+msg_error_decode((const struct msg_error*)&incoming);
+			return ERROR;
+		}
+		else {
+			errno = EBADF;
+			return ERROR;
+		}
 	}
 
 	info->di_target = p->target;

@@ -14,44 +14,48 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
-#define DOOR_CALL_RESERVED	16
-#define DOOR_RETURN_RESERVED	16
+#define DOOR_CALL_RESERVED	(sizeof(struct msg_door_call))
+#define DOOR_RETURN_RESERVED	(sizeof(struct msg_door_return))
+
+#define REQ_DOOR_INFO		0
 
 struct msg_error {
-	char data[8];
+	uint32_t	code;
+        int32_t		value;
 };
 
 static inline struct msg_error* msg_error_init( struct msg_error* p,
                                                 int e
                                               )
 {
-	*(uint32_t*)(p->data) = 0;
-	*(int32_t*)(p->data + 4) = (int32_t)e;
+	p->code = 0;
+	p->value = (int32_t)e;
 
 	return p;
 }
 
 static inline int msg_error_decode( const struct msg_error* p )
 {
-	return (int)*(const uint32_t*)(p->data + 4);
+	return (int)(p->value);
 }
 
-static inline bool is_msg_get_error( const struct msg_error* p )
+static inline bool is_msg_error( const struct msg_error* p )
 {
-	return 0U == *(const uint16_t*)(p->data + 2);
+	return 0U == p->code;
 }
 
 struct msg_request {
-	char data[8];
+	uint32_t	code;
+	uint32_t	request;
 };
 
 static inline struct msg_request*
 msg_request_init( struct msg_request* p, unsigned int request )
 {
-	*(uint16_t*)(p->data) = 0U;
-	*(uint16_t*)(p->data + 2) = 1U;
-	*(uint32_t*)(p->data + 4) = (uint32_t)request;
+	p->code = 1U;
+	p->request = request;
 
 	return p;
 }
@@ -59,16 +63,21 @@ msg_request_init( struct msg_request* p, unsigned int request )
 static inline unsigned int
 msg_request_decode(const struct msg_request* p)
 {
-	return (unsigned int)*(const uint32_t*)(p->data + 4);
+	return (unsigned int)(p->request);
 }
 
 static inline bool is_msg_request( const struct msg_request* p )
 {
-	return 1U == *(const uint16_t*)(p->data + 2);
+	return 1U == p->code;
 }
 
 struct msg_door_info {
-	char data[40];
+	uint32_t	code;
+	uint32_t	attr;
+	uint64_t	target;
+	uint64_t	proc;
+	uint64_t	cookie;
+	uint64_t	id;
 };
 
 static inline struct msg_door_info*
@@ -80,14 +89,13 @@ msg_door_info_init( struct msg_door_info* p,
                     door_id_t id
                   )
 {
-	*(uint16_t*)(p->data) = 0;
-	*(uint16_t*)(p->data + 2) = 2U;
-	*(uint32_t*)(p->data + 4) = (uint32_t)attr;
-	*(uint64_t*)(p->data + 8) = (uint64_t)target;
-	*(uint64_t*)(p->data + 16) = 0;
-	memcpy( p->data + 16, &proc, sizeof(proc) );
-	*(uint64_t*)(p->data + 24) = (uint64_t)cookie;
-	*(uint64_t*)(p->data + 32) = (uint64_t)id;
+	p->code = 2U;
+	p->attr = (uint32_t)attr;
+	p->target = (uint64_t)target;
+	p->proc = 0;
+	memcpy( &p->proc, &proc, sizeof(proc) );
+	p->cookie = (uint64_t)cookie;
+	p->id = (uint64_t)id;
 
 	return p;
 }
@@ -97,22 +105,24 @@ msg_door_info_decode( const struct msg_door_info* p,
                       struct door_info* r
                     )
 {
-	r->di_target = (pid_t)*(const uint64_t*)(p->data + 8);
-	r->di_proc = (door_ptr_t)*(const uint64_t*)(p->data + 16);
-	r->di_data = (door_ptr_t)*(const uint64_t*)(p->data + 24);
-	r->di_attributes = (door_attr_t)*(const uint32_t*)(p->data + 4);
-	r->di_uniquifier = (door_id_t)*(const uint64_t*)(p->data + 32);
+	r->di_target = (pid_t)(p->target);
+	r->di_proc = (door_ptr_t)(p->proc);
+	r->di_data = (door_ptr_t)(p->cookie);
+	r->di_attributes = (door_attr_t)(p->attr);
+	r->di_uniquifier = (door_id_t)(p->id);
 
 	return r;
 }
 
 static inline bool is_msg_door_info( const struct msg_door_info* p )
 {
-	return 2U == *(const uint16_t*)(p->data + 2);
+	return 2U == p->code;
 }
 
 struct msg_door_getparam {
-	char data[16];
+	uint32_t	code;
+	uint32_t	param;
+	uint64_t	value;
 };
 
 static inline struct msg_door_getparam*
@@ -121,10 +131,9 @@ msg_door_getparam_init( struct msg_door_getparam* p,
                         size_t val
                       )
 {
-	*(uint16_t*)(p->data) = 0U;
-	*(uint16_t*)(p->data + 2) = 3U;
-	*(uint32_t*)(p->data + 4) = (uint32_t)param;
-	*(uint64_t*)(p->data + 8) = (uint64_t)val;
+	p->code = 3U;
+	p->param = (uint32_t)param;
+	p->value = (uint64_t)val;
 
 	return p;
 }
@@ -132,30 +141,36 @@ msg_door_getparam_init( struct msg_door_getparam* p,
 static inline size_t
 msg_door_getparam_decode( const struct msg_door_getparam* p )
 {
-	return (size_t)*(const uint64_t*)(p->data + 8);
+	return (size_t)(p->value);
 }
 
-static inline bool is_msg_door_getparam( const struct msg_door_getparam* p )
+static inline bool is_msg_door_getparam( const struct msg_door_getparam* p,
+                                         unsigned int param
+                                       )
 {
-	return 3U == *(const uint16_t*)(p->data + 2);
+	return ( 3U == p->code && param == (unsigned int)(p->param) );
 }
 
 struct msg_door_call {
-	char header[16];
+	uint32_t	code;
+	uint32_t	ndesc;
+	uint64_t	arg_size;
 };
 
 static inline bool is_msg_door_call( const struct msg_door_call* p )
 {
-	return 4U == *(const uint16_t*)(p->header + 2);
+	return 4U == p->code;
 }
 
 struct msg_door_return {
-	char header[16];
+	uint32_t        code;
+	uint32_t        ndesc;
+	uint64_t        arg_size;
 };
 
 static inline bool is_msg_door_return( const struct msg_door_return* p )
 {
-	return 5U == *(const uint16_t*)(p->header + 2);
+	return 5U == p->code;
 }
 
 #endif /* !defined(H_MESSAGES) */
