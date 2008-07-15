@@ -20,14 +20,6 @@
 #include "error.h"
 #include "messages.h"
 
-int door_close( int d )
-/* Wrapper for close().  In the future, this may deliver unreferenced 
- * invocations, free data structures, etc.
- */
-{
-	return close(d);
-}
-
 int door_open( const char* path )
 /* Drop-in replacement for open().  Currently, this opens a door 
  * descriptor, which is a socket connected to the UNIX domain socket at 

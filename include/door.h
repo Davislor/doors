@@ -172,16 +172,15 @@ extern int door_attach( int d, const char* path );
 
 extern int door_detach( const char* path );
 
-/* In this implementation, the system open() and close() functions don't
- * do the right thing with doors (which are sockets).  I therefore
- * provide door_open() and door_close() library functions.  The
- * door_close() function has identical syntax and semantics to close().
- * The door_open() function has no second or third arguments, which are
- * not meaningful for doors.
+/* In this implementation, the open() system call doesn't do the right
+ * thing with doors (which are sockets).  I therefore provide
+ * door_open() as a replacement for open.  It does not have any flags 
+ * at present, because it makes no sense for a door to be open for 
+ * reading but not writing, or vice versa.  (It might conceivably make
+ * logical sense to have a door that does asynchronous IPC, but setting
+ * O_NONBLOCK on the door descriptor would not have the desired effect.)
  */
 extern int door_open( const char* path );
-
-extern int door_close( int d );
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -74,8 +74,8 @@ int main(void)
 		printf("Client:\n");
 		print_door_info(&info);
 
-		if ( 0 != door_close(d) ) {
-			perror("door_close");
+		if ( 0 != close(d) ) {
+			perror("close");
 			return EXIT_FAILURE;
 		}
 
