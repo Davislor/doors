@@ -574,7 +574,7 @@ int door_detach ( const char* path )
 /* Check that the target exists and is a socket.  Might produce an 
  * unusual errno value.
  */
-	if ( 0 == stat( path, &buf ) ) {
+	if ( 0 != stat( path, &buf ) ) {
 		errno = EPERM;
 		return ERROR;
 	}
@@ -645,8 +645,6 @@ int door_getparam (int d, int param, size_t* out)
 int door_info (int d, struct door_info* info)
 /* See the SunOS 5.11 manual for a specification of how this function 
  * should work.
- *
- * At present, this function is only implemented for local doors.
  */
 {
 	static const int ERROR = -1;
@@ -661,14 +659,10 @@ int door_info (int d, struct door_info* info)
 		return ERROR;
 	}
 
-	lock_door_table();
-	p = door_table[d];
-	unlock_door_table();
-
 	if ( ( NULL == door_table ) ||
 	     ( open_max <= d ) ||
 	     ( 0 > d ) ||
-	     ( NULL == p )
+	     ( NULL == door_table[d] )
 	   ) {
 /* Not a local door. */
 		struct msg_request outgoing;
@@ -701,6 +695,10 @@ msg_error_decode((const struct msg_error*)&incoming);
 			return ERROR;
 		}
 	}
+
+	lock_door_table();
+	p = door_table[d];
+	unlock_door_table();
 
 	info->di_target = p->target;
 

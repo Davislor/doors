@@ -11,7 +11,8 @@ PRODUCTIONFLAGS = -O3
 # On Linux, set LDFLAGS to -pthread
 # On Solaris, set LDFLAGS to -lpthread -lsocket
 
-all: error1 localserver1 localserver2 get_unique_id socketpair1
+all: error1 localserver1 localserver2 get_unique_id socketpair1 \
+client-server1
 
 tests: sun1 error1 localserver1 localserver2 sun2 get_unique_id \
 socketpair1
@@ -40,6 +41,9 @@ error1.o: test/error1.c include/door.h include/standards.h include/error.h
 error.o: error.c include/error.h
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c error.c
 
+door_client.o: door_client.c include/door.h include/standards.h
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c door_client.c
+
 door_server.o: door_server.c include/door.h include/error.h \
 include/standards.h include/messages.h
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c door_server.c
@@ -65,8 +69,16 @@ socketpair1.o door_server.o error.o
 socketpair1.o: test/socketpair1.c include/door.h include/messages.h include/standards.h
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c test/socketpair1.c
 
+client-server1.o: test/client-server1.c include/door.h include/messages.h \
+include/standards.h
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c test/client-server1.c
+
+client-server1: client-server1.o error.o door_client.o door_server.o
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) -o client-server1 \
+client-server1.o door_client.o door_server.o error.o
+
 clean:
 	-rm -f localserver1.o localserver1 localserver2.o localserver2 \
 sun1.o sun1 sun2.o sun2 error1.o error1 door_server.o error.o \
-door_client.o get_unique_id.o get_unique_id socketpair1.o socketpair1
-
+door_client.o get_unique_id.o get_unique_id socketpair1.o socketpair1 \
+client-server1.o client-server1

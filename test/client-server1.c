@@ -55,11 +55,11 @@ int main(void)
 		perror("fork");
 		return EXIT_FAILURE;
 	}
-	else if ( 0 == status ) {
+	else if ( 0 != status ) {
 		struct door_info info;
 		int d;
 
-		sleep(5);
+		sleep(1);
 		d = door_open(door_path);
 		if ( 0 > d ) {
 			perror("door_open");
@@ -89,10 +89,11 @@ int main(void)
 		struct door_info info;		/* Used by door_info() */
 		struct msg_request incoming;
 		struct msg_door_info outgoing;
+		door_attr_t attr;
 
 		door_detach(door_path);
 
-		d = door_create( dummy_server, (void*)&status, 0 );
+		d = door_create( dummy_server, (void*)door_path, 0 );
 
 		if ( 0 > d ) {
 			perror("door_create");
@@ -128,11 +129,13 @@ int main(void)
 			return EXIT_FAILURE;
 		}
 
+		attr = info.di_attributes & ~(door_attr_t)DOOR_LOCAL;
+
 		msg_door_info_init( &outgoing,
 		                    getpid(),
 		                    dummy_server,
-		                    (void*)&status,
-		                    info.di_attributes,
+		                    (void*)door_path,
+		                    attr,
 		                    info.di_uniquifier
 		                  );
 
