@@ -412,70 +412,20 @@ int door_attach ( int d, const char* path )
 	memcpy( address.sun_path, path, path_len );
 	address.sun_path[path_len] = '\0';
 
-/* FIXME: restore this!
 	old_umask = umask( S_IRWXU | S_IRWXG | S_IRWXO );
- */
 
 	if ( 0 != bind( d,
 	                (const struct sockaddr*)&address,
 	                offsetof( struct sockaddr_un, sun_path ) + path_len
 	              )
 	   ) {
-/* FIXME: restore this!
 		umask(old_umask);
- */
 		return ERROR;
 	}
-/* FIXME: restore this!
 	umask(old_umask);
- */
 
-/* FIXME: Remove this! */
-	chmod( path, S_IRUSR | S_IWUSR );
-
-/* FIXME: have a thread poll() or select() on local doors.
- *	return listen( d, SOMAXCONN );
- */
-
-	if ( 0 != listen( d, SOMAXCONN ) )
-		return ERROR;
-
-	int endpoint;
-	struct msg_request incoming;
-
-	endpoint = accept( d, NULL, NULL );
-
-	if ( 0 > endpoint ) {
-		return ERROR;
-	}
-
-	recv( endpoint, &incoming, sizeof(incoming), 0 );
-
-	if ( ! is_msg_request(&incoming) || 
-	     REQ_DOOR_INFO != msg_request_decode(&incoming)
-	   ) {
-		struct msg_error outgoing;
-
-		msg_error_init( &outgoing, EINVAL );
-		send( endpoint, &outgoing, sizeof(outgoing), MSG_EOR );
-	}
-	else {
-		struct msg_door_info outgoing;
-		const struct door_data* p = door_table[d];
-
-		msg_door_info_init( &outgoing,
-		                    p->target,
-		                    p->server_proc,
-		                    p->cookie,
-		                    p->attr,
-		                    p->id
-		                  );
-
-		send( endpoint, &outgoing, sizeof(outgoing), MSG_EOR );
-	}
-
-	close(endpoint);
-	return SUCCESS;
+/* FIXME: have a thread poll() or select() on local doors. */
+	return listen( d, SOMAXCONN );
 }
 
 int door_create(
@@ -777,12 +727,15 @@ int door_revoke (int d)
  * works.
  *
  * This implementation marks a door as revoked by marking its server 
- * process as 0.  It additionally sets the DOOR_REVOKED attribute.
+ * process as 0.
  *
  * Currently, this function makes no effort to distinguish between 
  * non-local doors and non-doors.  If door_table[d].info reports 0 as 
  * the server process, you get back EPERM.  Also, it makes no special 
  * effort to guarantee that door operations are atomic.
+ *
+ * FIXME: Never, ever, ever free the door_table entry while any other 
+ * thread might hold a pointer to it!  Lock it!
  */
 {
 	static const int ERROR = -1;

@@ -168,9 +168,20 @@ extern int door_unbind(void);
  * it with a call such as chmod().  It temporarily modifies the umask,
  * and so is not thread-safe in that respect.
  */
-extern int door_attach ( int d, const char* path );
+extern int door_attach( int d, const char* path );
 
-extern int door_detach ( const char* path );
+extern int door_detach( const char* path );
+
+/* In this implementation, the system open() and close() functions don't
+ * do the right thing with doors (which are sockets).  I therefore
+ * provide door_open() and door_close() library functions.  The
+ * door_close() function has identical syntax and semantics to close().
+ * The door_open() function has no second or third arguments, which are
+ * not meaningful for doors.
+ */
+extern int door_open( const char* path );
+
+extern int door_close( int d );
 
 #ifdef __cplusplus
 } /* extern "C" */
