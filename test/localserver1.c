@@ -1,6 +1,7 @@
 #include "standards.h"
 #include "door.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -29,6 +30,7 @@ int main(void)
 	struct door_info info;
 	pid_t self;
 
+	errno = 0;
 	self = getpid();
 
 	doors[0] = door_create( proc1, (void*)proc1, DOOR_REFUSE_DESC );

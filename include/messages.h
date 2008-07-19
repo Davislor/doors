@@ -21,6 +21,17 @@
 
 #define REQ_DOOR_INFO		0
 
+static inline long long message_type( int d )
+{
+	static const long long ERROR = -1;
+	uint32_t type;
+
+	if ( 0 > recv( d, &type, sizeof(type), MSG_PEEK ) )
+		return ERROR;
+
+	return (long long)type;
+}
+
 struct msg_error {
 	uint32_t	code;
         int32_t		value;

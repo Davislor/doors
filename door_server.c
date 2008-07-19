@@ -14,6 +14,8 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <pthread.h>
+#include <signal.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -51,6 +53,8 @@ typedef void (*server_proc_t) (void*, char*, size_t, door_desc_t*, uint_t);
  * the table's storage, and set door_table to NULL.
  */
 
+/* FIXME: door_revoke() currently breaks listening threads! */
+
 struct door_data {
 	pid_t		target;		/* Server PID */
 	server_proc_t	server_proc;	/* Points to server proc */
@@ -66,6 +70,16 @@ struct door_data {
  * heap-allocated data.
  */
 static struct door_data** door_table = NULL;
+
+/* The thread start procedure that listens to each new connection
+ * receives a pointer to one of these structures.  The listen_fd member
+ * contains the endpoint to listen to, and the data member points to the
+ * associated door's entry in the door_table.
+ */
+struct door_connect_t {
+	int			listen_fd;
+	struct door_data*	data_ptr;
+};
 
 /* A thread which attempts to create, resize, destroy or move door_table 
  * must hold the following lock in exclusive mode.  One which attempts 
@@ -225,7 +239,7 @@ static struct door_data** init_door_table(void)
 
 /* Once we hold the lock, if door_table is not NULL, then this thread 
  * was in a race to create the first door, it lost, and another thread 
- * already initialized door_table.  Release the lock (Very important!) 
+ * already initialized door_table.  Release the lock (Very Important!) 
  * and break here.  Otherwise, proceed.
  */
         if ( NULL == door_table) {
@@ -282,7 +296,8 @@ static struct door_data** resize_door_table( int did )
 		guess = ( (size_t)did + 1024 ) & ~(size_t)1023;
 
 		sys = sysconf(_SC_OPEN_MAX);
-		assert( sys > did );
+/* Don't crash if sysconf() reports -1 (no fixed limit). */
+		assert( 0 > sys || sys > did );
 
 /* Allocating more than {OPEN_MAX} entries wastes space. */
 		if ( (0 >= sys) || (guess < (size_t)sys) )
@@ -291,8 +306,8 @@ static struct door_data** resize_door_table( int did )
 			new_max = (size_t)sys;
 
 /* Rounding up ensures that guess > did.  The assert() ensures that
- * sys > did.  We checked earlier that open_max <= did.  Therefore, 
- * new_max > did >= open_max.
+ * sys > did or sys == -1.  We checked earlier that open_max <= did.
+ * Therefore, new_max > did >= open_max.
  */
 		door_table = (struct door_data**)
 realloc( door_table, new_max * sizeof(struct door_data*) );
@@ -333,17 +348,247 @@ static inline void unlock_door_table(void)
  * an error while holding the lock.
  */
 {
-	if ( 0 != pthread_rwlock_rdlock(&door_table_lock) ) {
-		perror("pthread_rwlock_rdlock");
+	if ( 0 != pthread_rwlock_unlock(&door_table_lock) ) {
+		perror("pthread_rwlock_unlock");
 		exit(EXIT_FAILURE);
 	}
 
 	return;
 }
 
+static void handle_msg_request( int fd, const struct door_data* p )
+/* Reads a request message from the connected socket fd, generates a message
+ * based on the information to which p points, and transmits that message
+ * back.
+ *
+ * Transmits back an error message (EINVAL) if it does not recognize the
+ * request.
+ */
+{
+	struct msg_request incoming;
+
+	if ( 0 > recv( fd, &incoming, sizeof(incoming), 0 ) ) {
+		close(fd);
+		return;
+	}
+
+	if ( ! is_msg_request(&incoming) ) {
+/* If it's not an informational request, we shouldn't be here. */
+		struct msg_error outgoing;
+
+		msg_error_init( &outgoing, EINVAL );
+		send( fd, &outgoing, sizeof(outgoing), MSG_EOR );
+		close(fd);
+/* Linger? */
+		return;
+	}
+
+	switch ( msg_request_decode(&incoming) ) {
+		case 0: { /* door_info */
+			struct msg_door_info outgoing;
+
+			msg_door_info_init( &outgoing,
+			                    p->target,
+			                    p->server_proc,
+			                    p->cookie,
+			                    p->attr,
+			                    p->id
+			                  );
+
+			send( fd, &outgoing, sizeof(outgoing), MSG_EOR );
+			break;
+		}
+		case 1: { /* data_max */
+			struct msg_door_getparam outgoing;
+
+			msg_door_getparam_init( &outgoing, 1, p->data_max );
+			send( fd, &outgoing, sizeof(outgoing), MSG_EOR );
+			break;
+		}
+		case 2: { /* data_min */
+			struct msg_door_getparam outgoing;
+
+			msg_door_getparam_init( &outgoing, 2, p->data_min );
+			send( fd, &outgoing, sizeof(outgoing), MSG_EOR );
+			break;
+		}
+		case 3: { /* desc_max */
+			struct msg_door_getparam outgoing;
+
+/* The implementation does not yet support descriptor passing. */
+			msg_door_getparam_init( &outgoing, 3, 0 );
+			send( fd, &outgoing, sizeof(outgoing), MSG_EOR );
+			break;
+		}
+		default: { /* Bad or unknown request! */
+			struct msg_error outgoing;
+
+			msg_error_init( &outgoing, EINVAL );
+			send( fd, &outgoing, sizeof(outgoing), MSG_EOR );
+		}
+	}
+
+	return;
+}
+
+static void* connection_listen( void* connection_ptr )
+/* Listen for messages on the given connection.  The argument is a
+ * pointer to a door_connect_t structure.  This thread must free it when
+ * finished.
+ *
+ * It performs little or no argument-checking and always "returns" NULL.
+ *
+ * FIXME: Handle commands other than door_info!
+ */
+{
+	const int fd = ((struct door_connect_t*)connection_ptr)->listen_fd;
+	struct door_data* const p =
+((struct door_connect_t*)connection_ptr)->data_ptr;
+	uint32_t code;	/* The incoming message code. */
+
+/* Since we've already copied the data to local storage, we no longer need
+ * the buffer.
+ */
+	free(connection_ptr);
+
+/* Peek ahead at the type of the next message. */
+	while ( 0 <= recv( fd, &code, sizeof(code), MSG_PEEK ) ) {
+		switch (code) {
+			case 1U:
+				handle_msg_request( fd, p );
+				break;
+			default: {
+				struct msg_error outgoing;
+
+				msg_error_init( &outgoing, ENOTSUP );
+				send( fd,
+				      &outgoing,
+				      sizeof(outgoing),
+				      MSG_EOR
+				    );
+/* We could check for the MSG_EOR flag in recvmsg() to recover from this
+ * error.  We could at least linger.  At present, we just close the socket.
+ */
+				close(fd);
+			}
+		}
+	}
+
+/* Our attempt to read a request code failed.  Could this be because the
+ * connection no longer exists?
+ *
+ * Support for unreferenced invocations goes here.
+ */
+
+	return NULL;
+}
+
+static void* door_listen( void* int_ptr )
+/* This function listens on the door descriptor pointed to by d_ptr
+ * (a pointer to const int), and spawns a new thread to listen on each 
+ * connection to this descriptor.
+ *
+ * When the door closes (or becomes invalid), accept() will fail, and 
+ * the thread will terminate itself, calling free() on d_ptr.
+ *
+ * This function is intended as an argument to pthread_create().  It
+ * does not handle bad arguments robustly (as they are programming
+ * errors).  It always "returns" NULL.
+ */
+{
+	const int d = *(const int*)int_ptr;	/* Our door descriptor. */
+/* Keep a reference to the door's associated data. */
+	struct door_data* p;
+	int endpoint;
+
+/* Since we've already copied the data to local storage, we no longer need 
+ * the buffer.
+ */
+	free(int_ptr);
+
+	lock_door_table();
+	p = door_table[d];
+	unlock_door_table();	
+
+	assert( NULL != p );
+
+	while ( 0 <= ( endpoint = accept( d, NULL, 0 ) )
+	      ) {
+/* We have a new connection.  Spawn another thread to listen on it. */
+/* Information the new thread will need, and free. */
+		struct door_connect_t* arg;
+/* We'll get back the thread ID, but not keep it. */
+		pthread_t thread_id;
+
+		arg =
+(struct door_connect_t*)malloc(sizeof(struct door_connect_t));
+		if ( NULL == arg )
+			return NULL;
+
+		arg->listen_fd = endpoint;
+		arg->data_ptr = p;
+
+		if (
+0 != pthread_create( &thread_id, NULL, connection_listen, (void*)arg )
+		) {
+/* No one's listening!  Close the connection.  Also, there's no one
+ * else to free arg, so do that now.
+ */
+			free(arg);
+			close(endpoint);
+		} /* end if */
+	} /* end while */
+
+/* Whoops! We can't listen any more.  Could it be that another thread
+ * revoked our door?
+ */
+	return NULL;
+}
+
+static int spawn_door_server( int d )
+/* Spawn a thread to listen on door descriptor d for incoming 
+ * connections.  The new thread and its children attempt to block all signals.
+ *
+ * Copies d, which has an unknown lifetime, to automatic storage.  The
+ * new thread must free() this storage before it terminates.
+ *
+ * Returns 0 on success, -1 on failure, and sets errno.
+ */
+{
+	static const int ERROR = -1;
+	int* p;
+	pthread_t thread_id;
+	sigset_t all_signals;
+	sigset_t old_mask;
+	int retval;
+
+	if ( d < 0 || d >= open_max ) {
+		errno = EBADF;
+		return ERROR;
+	}
+
+
+	p = (int*)malloc(sizeof(int));
+
+	if ( NULL == p ) {
+		errno = ENOMEM;
+		return ERROR;
+	}
+
+	*p = d;
+
+	sigfillset(&all_signals);
+
+	pthread_sigmask( SIG_BLOCK, &all_signals, &old_mask );
+	retval = pthread_create( &thread_id, NULL, door_listen, (void*)p );
+	pthread_sigmask( SIG_SETMASK, &old_mask, NULL );
+
+	return retval;
+}
+
 /* Functions <door.h> exports: */
 
-int door_attach ( int d, const char* path )
+int door_attach( int d, const char* path )
 /* Attach the door descriptor d to the filesystem, with pathname path.
  * This function replaces fattach(), which does not exist on Linux.  It
  * has one major difference: fattach() expects a file with that pathname
@@ -372,7 +617,7 @@ int door_attach ( int d, const char* path )
  * the bound socket to 0, for security reasons.  The server should 
  * immediately change the owner and group if desired, and then enable 
  * read, write and execute permission for the desired users with 
- * fcntl().
+ * chmod() or the like.
  *
  * This function returns 0 on success, or -1 on error, setting errno
  * appropriately.
@@ -380,8 +625,7 @@ int door_attach ( int d, const char* path )
  * FIXME: Document errno values.
  */
 {
-	static const int SUCCESS = 0;
-	static const int ERROR = -1;
+	static const int SUCCESS = 0, ERROR = -1;
 	mode_t old_umask;		/* Used by umask() */
 
 	size_t path_len;
@@ -424,8 +668,10 @@ int door_attach ( int d, const char* path )
 	}
 	umask(old_umask);
 
-/* FIXME: have a thread poll() or select() on local doors. */
-	return listen( d, SOMAXCONN );
+	if ( 0 != listen( d, SOMAXCONN ) )
+		return ERROR;
+
+	return SUCCESS;
 }
 
 int door_create(
@@ -486,8 +732,8 @@ int door_create(
 	if ( did >= open_max )
 /* Our table is too small.  Better resize. */
 		if ( NULL == resize_door_table(did) ) {
-			errno = ENOMEM;
 			close(did);
+			errno = ENOMEM;
 			return ERROR;
 		}
 
@@ -501,6 +747,8 @@ int door_create(
 		close(did);
 		return ERROR;
 	}
+
+	assert( default_buf > DOOR_CALL_RESERVED );
 
 /* It makes no sense to keep a door open after exec(), as even if the
  * new program is also a door server, it won't know about this door.
@@ -517,7 +765,7 @@ int door_create(
  * Do not attempt to use the door until door_create() has returned, or 
  * we may have a race!
  */
-	p = calloc( 1, sizeof(struct door_data) );
+	p = (struct door_data*)calloc( 1, sizeof(struct door_data) );
 	if ( NULL == p ) {
 		close(did);
 		errno = ENOMEM;
@@ -535,6 +783,14 @@ int door_create(
 	p->id = get_unique_id();
 	p->data_min = 0;
 	p->data_max = (size_t)default_buf - DOOR_CALL_RESERVED;
+
+/* This is thread-safe, or at least absent from the list of functions 
+ * allowed not to be.
+ */
+	if ( 0 != spawn_door_server(did) ) {
+		close(did);
+		return ERROR;
+	}
 
 	return did;
 }
@@ -603,23 +859,62 @@ int door_getparam (int d, int param, size_t* out)
 
 	const struct door_data* p;
 
+	if ( param < DOOR_PARAM_DATA_MAX ||
+	     param > DOOR_PARAM_DESC_MAX 
+	   ) {
+		errno = EINVAL;
+		return ERROR;
+	}
+
 	if ( NULL == out ) {
 		errno = EINVAL;
 		return ERROR;
 	}
 
-	lock_door_table();
-	p = door_table[d];
-	unlock_door_table();
-
 	if ( ( NULL == door_table ) ||
 	     ( d >= open_max ) ||
 	     ( 0 > d ) ||
-	     ( NULL == p )
+	     ( NULL == door_table[d] )
 	   ) {
-		errno = EBADF;
-		return ERROR;
+/* Not a local door. */
+		struct msg_request outgoing;
+		uint32_t type;
+
+		msg_request_init( &outgoing, param );
+		send( d, &outgoing, sizeof(outgoing), MSG_EOR );
+
+		if ( 0 > recv( d, &type, sizeof(type), MSG_PEEK ) )
+			return ERROR;
+
+		if ( 3U == type ) {
+			struct msg_door_getparam incoming;
+
+			if (
+0 > recv( d, &incoming, sizeof(incoming), 0 )
+			   )
+				return ERROR;
+
+			*out =  msg_door_getparam_decode(&incoming);
+		}
+		else if ( 0U == type ) {
+			struct msg_error incoming;
+
+			if (
+0 > recv( d, &incoming, sizeof(incoming), 0 )
+			   )
+				return ERROR;
+
+			errno = msg_error_decode(&incoming);
+			return ERROR;
+		} /* end if (message type) */
+
+		return SUCCESS;
 	}
+
+/* A local door. */
+	lock_door_table();
+	p = door_table[d];
+	unlock_door_table();
 
 	switch (param) {
 		case DOOR_PARAM_DATA_MAX:
@@ -633,10 +928,7 @@ int door_getparam (int d, int param, size_t* out)
 		case DOOR_PARAM_DESC_MAX:
 			*out = 0;
 			break;
-
-		default:
-			errno = EINVAL;
-			return ERROR;
+/* We already tested that param is one of those three. */
  	}
 
 	return SUCCESS;

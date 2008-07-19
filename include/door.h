@@ -61,7 +61,7 @@ typedef unsigned int		door_attr_t;
  */
 typedef unsigned long long int	door_ptr_t;
 
-/* Temporary placeholders */
+/* Placeholders */
 typedef struct door_desc_t	door_desc_t;
 typedef struct door_cred_t	door_cred_t;
 typedef struct ucred_t		ucred_t;
@@ -92,9 +92,10 @@ typedef void (* _door_thread_proc) ();
 #define DOOR_REVOKED		0x040
 
 /* Parameters for door_setparam() and door_getparam(): */
-#define DOOR_PARAM_DATA_MAX	0x001
-#define DOOR_PARAM_DATA_MIN	0x002
-#define DOOR_PARAM_DESC_MAX	0x003
+/* 0 is the code for door_info in a request. */
+#define DOOR_PARAM_DATA_MAX	1
+#define DOOR_PARAM_DATA_MIN	2
+#define DOOR_PARAM_DESC_MAX	3
 
 /* Currently unimplemented. */
 extern int door_bind(int did);
@@ -111,10 +112,8 @@ extern int door_create( void (* server_procedure)
 /* Currently unimplemented. */
 extern int door_cred (door_cred_t* info);
 
-/* Implemented for local doors only. */
 extern int door_getparam(int d, int param, size_t* out);
 
-/* Currently implented for local doors only. */
 extern int door_info(int d, struct door_info* info);
 
 /* Probably never will be implemented.  Trusted Solaris only. */
@@ -133,7 +132,6 @@ extern int door_revoke(int d);
 extern _door_thread_proc
 door_server_create( _door_thread_proc create_proc );
 
-/* Implemented for local doors only. */
 extern int door_setparam(int d, int param, size_t val);
 
 /* Currently unimplemented. */
@@ -166,7 +164,7 @@ extern int door_unbind(void);
  *
  * The door_attach() function creates a door that no one can use; follow
  * it with a call such as chmod().  It temporarily modifies the umask,
- * and so is not thread-safe in that respect.
+ * and so is not thread-safe in that regard.
  */
 extern int door_attach( int d, const char* path );
 

@@ -41,6 +41,8 @@ void print_door_info( const struct door_info* info )
 
 	printf( "ID:\t\t%llu\n", (unsigned long long)info->di_uniquifier );
 
+	fflush(stdout);
+
 	return;
 }
 
@@ -63,11 +65,13 @@ int main(void)
 		d = door_open(door_path);
 		if ( 0 > d ) {
 			perror("door_open");
+			fflush(stderr);
 			return EXIT_FAILURE;
 		}
 
 		if ( 0 != door_info( d, &info ) ) {
 			perror("door_info (client)");
+			fflush(stderr);
 			return EXIT_FAILURE;
 		}
 
@@ -84,12 +88,12 @@ int main(void)
 	else {
 		int d;		/* Descriptor from door_create() */
 		int e;		/* Descriptor from accept() */
-		struct sockaddr_un address;
-		socklen_t addr_len = sizeof(struct sockaddr_un);
+		socklen_t addr_len = 0;
 		struct door_info info;		/* Used by door_info() */
 		struct msg_request incoming;
 		struct msg_door_info outgoing;
 		door_attr_t attr;
+		siginfo_t siginfo;
 
 		door_detach(door_path);
 
@@ -105,7 +109,7 @@ int main(void)
 			return EXIT_FAILURE;
 		}
 
-		if ( 0 != chmod( door_path, S_IRUSR | S_IWUSR ) ) {
+		if ( 0 != chmod( door_path, S_IRWXU ) ) {
 			perror("chmod");
 			return EXIT_FAILURE;
 		}
@@ -118,7 +122,7 @@ int main(void)
 		printf("Server:\n");
 		print_door_info(&info);
 
-		e = accept( d, (struct sockaddr*)&address, &addr_len );
+		e = accept( d, NULL, &addr_len );
 		if ( 0 > e ) {
 			perror("accept");
 			return EXIT_FAILURE;
@@ -154,6 +158,15 @@ int main(void)
 			return EXIT_FAILURE;
 		}
 
-		return EXIT_FAILURE;
+		if ( 0 !=  waitid( P_PID, (id_t)status, &siginfo, WEXITED ) ) {
+			perror("waitid");
+			return EXIT_FAILURE;
+		}
+
+		if ( EXIT_SUCCESS != siginfo.si_status ) {
+			fprintf(stderr,"Child failed with signal %d.\n",siginfo.si_signo);
+		}
+
+		return EXIT_SUCCESS;
 	}
 }
