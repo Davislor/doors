@@ -14,9 +14,6 @@ PRODUCTIONFLAGS = -O3
 all: error1 localserver1 localserver2 get_unique_id socketpair1 \
 client-server2
 
-tests: sun1 error1 localserver1 localserver2 sun2 get_unique_id \
-socketpair1
-
 get_unique_id: get_unique_id.o error.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o get_unique_id \
 get_unique_id.o error.o
