@@ -1,0 +1,8 @@
+*.o
+client-server2
+door_call1
+error1
+get_unique_id
+localserver1
+localserver2
+socketpair1
