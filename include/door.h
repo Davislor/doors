@@ -78,7 +78,15 @@ typedef struct door_info {
 	door_id_t	di_uniquifier;
 } door_info_t;
 
-typedef struct door_arg_t	door_arg_t;
+/* For source-compatibility, the typedef is necessary: */
+typedef struct door_arg_t {
+	void*		data_ptr; /* Points to data */
+	door_desc_t*	desc_ptr; /* Currently unsupported.  Use NULL. */
+	size_t		data_size; /* Size of data. */
+	size_t		desc_num; /* Currently unsupported.  Use 0. */
+	void*		rbuf; /* Results buffer. */
+	size_t		rsize; /* Size of the results buffer. */
+} door_arg_t;
 
 typedef void (* _door_thread_proc) ();
 
@@ -100,8 +108,8 @@ typedef void (* _door_thread_proc) ();
 /* Currently unimplemented. */
 extern int door_bind(int did);
 
-/* Currently unimplemented. */
-extern int door_call(int d, door_arg_t* params);
+/* Partially implemented. */
+extern int door_call( int d, door_arg_t* params );
 
 extern int door_create( void (* server_procedure)
 (void* cookie, char* argp, size_t arg_size, door_desc_t* dp, uint_t n_desc),
@@ -179,6 +187,13 @@ extern int door_detach( const char* path );
  * O_NONBLOCK on the door descriptor would not have the desired effect.)
  */
 extern int door_open( const char* path );
+
+/* This wrapper for close() exists to give the implementation
+ * flexibility to allocate data structures for each open connection,
+ * without leaking memory.
+ */
+extern int door_close( int d );
+
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -2,11 +2,11 @@
 # Copyright (C) 2008 Loren B. Davis.
 # Released under the LGPL, version 3.  See COPYING.
 
-CC = c99 -I include
-DEBUGFLAGS = -g
-PRODUCTIONFLAGS = -O3
+CC = gcc
+CFLAGS = -std=c99
+DEBUGFLAGS = -g -Wall -pedantic
+LIBS = -pthread
 
-# On Sun C, set CFLAGS to include -xtarget=native64 -mt
 # On GCC, set CFLAGS to include -std=c99 -m64 -Wall -pedantic
 # On Linux, set LIBS to -pthread
 # On Solaris, set LIBS to -lpthread -lsocket
