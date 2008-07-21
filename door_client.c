@@ -180,8 +180,15 @@ int door_call( int door, door_arg_t* params )
 		ssize_t return_size, bytes_read;
 		void* return_buf = NULL;
 		bool new_buffer = false;
+		struct iovec recv_iovs[2];
+		struct msghdr recv_hdr = {
+			.msg_iov = recv_iovs,
+			.msg_iovlen = 2
+		};
 
-		if ( 0 > recv( door, &incoming, sizeof(incoming), 0 ) )
+		if (
+0 > recv( door, &incoming, sizeof(incoming), MSG_PEEK ) 
+		   )
 			return ERROR;
 
 		return_size = msg_door_return_get_data_size(&incoming);
@@ -219,17 +226,18 @@ int door_call( int door, door_arg_t* params )
 		else
 			return_buf = params->rbuf;
 
-/* The rbuf member of params now points to a buffer big enough to hold 
+/* The return_buf variable now points to a buffer big enough to hold 
  * the requested data.
  */
+		recv_iovs[0].iov_base = &incoming;
+		recv_iovs[0].iov_len = sizeof(incoming);
 
-		bytes_read = recv( door,
-		                   return_buf,
-		                   (size_t)return_size,
-		                   0
-		                 );
+		recv_iovs[1].iov_base = return_buf;
+		recv_iovs[1].iov_len = (size_t)return_size;
 
-		if ( bytes_read < return_size ) {
+		bytes_read = recvmsg( door, &recv_hdr, MSG_WAITALL );
+
+		if ( sizeof(incoming) + return_size != bytes_read ) {
 /* Failed to read the data that should be there. */
 			if (new_buffer)
 				free(return_buf);
@@ -246,7 +254,7 @@ int door_call( int door, door_arg_t* params )
 			params->data_size = (size_t)return_size;
 
 			return SUCCESS;
-		} /* end if (result of recv() ). */
+		} /* end if ( number of bytes read ). */
 	} /* end if ( type of message received ) */
 
 /* We received the wrong kind of message. */

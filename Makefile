@@ -12,7 +12,7 @@ LIBS = -pthread
 # On Solaris, set LIBS to -lpthread -lsocket
 
 all: error1 localserver1 localserver2 get_unique_id socketpair1 \
-client-server2
+client-server2 door_call1
 
 get_unique_id: get_unique_id.o error.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o get_unique_id \
@@ -82,8 +82,17 @@ client-server2: client-server2.o door_client.o door_server.o error.o
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
 -o client-server2 client-server2.o door_client.o door_server.o error.o
 
+door_call1: door_call1.o door_client.o door_server.o error.o
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
+-o door_call1 door_call1.o door_client.o door_server.o error.o
+
+door_call1.o: test/door_call1.c include/door.h include/error.h include/standards.h
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c test/door_call1.c
+
 clean:
 	-rm -f localserver1.o localserver1 localserver2.o localserver2 \
 sun1.o sun1 sun2.o sun2 error1.o error1 door_server.o error.o \
 door_client.o get_unique_id.o get_unique_id socketpair1.o socketpair1 \
-client-server1.o client-server1 client-server2.o client-server2
+client-server1.o client-server1 client-server2.o client-server2 \
+door_call1 door_call1.o
+

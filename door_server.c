@@ -390,8 +390,13 @@ static void inline handle_door_call( int fd, const struct door_data* p )
 	struct msg_door_call incoming;
 	void* argp = NULL;
 	ssize_t arg_size;
+	struct iovec read_iovs[2];
+	struct msghdr read_hdr = {
+		.msg_iov = read_iovs,
+		.msg_iovlen = 2
+	};
 
-	if ( 0 > recv( fd, &incoming, sizeof(incoming), 0 ) ) {
+	if ( 0 > recv( fd, &incoming, sizeof(incoming), MSG_PEEK ) ) {
 		return;
 	}
 
@@ -425,14 +430,21 @@ static void inline handle_door_call( int fd, const struct door_data* p )
 
 		pthread_setspecific( arg_buf, argp );
 	}
-
 /* We have stored the socket to send the results to where door_return()
  * can retrieve it.  We know that arg_size is an appropriate amount of
  * data; furthermore, if it is nonzero, argp points to a buffer large
  * enough to hold it, and which will automatically be freed upon thread
  * cancellation.
  */
-	if ( arg_size != recv( fd, argp, (size_t)arg_size, 0 ) ) {
+	read_iovs[0].iov_base = &incoming;
+	read_iovs[0].iov_len = sizeof(incoming);
+
+	read_iovs[1].iov_base = argp;
+	read_iovs[1].iov_len = (size_t)arg_size;
+
+	if ( sizeof(struct msg_door_call) + arg_size !=
+	     recvmsg( fd, &read_hdr, MSG_WAITALL )
+	   ) {
 		xmit_error( fd, EBADMSG );
 		return;
 	}
