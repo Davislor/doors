@@ -3,7 +3,7 @@
 # Released under the LGPL, version 3.  See COPYING.
 
 CC = gcc
-CFLAGS = -std=c99
+CFLAGS = -std=c99 -I include
 DEBUGFLAGS = -g -Wall -pedantic
 LIBS = -pthread
 

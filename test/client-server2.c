@@ -61,8 +61,8 @@ int server_process(void)
 		perror("door_getparam (server)");
 
 	printf("Server:\nPID:\t\t%ld\nProcedure:\t%llX\nCookie:\t\t%llx\n"
-	       "Attributes:\t%X\nID:\t\t%llX\nMin Data:\t\t%zu\n"
-	       "Max Data:\t\t%zu\nMax Descs:\t\t%zu\n",
+	       "Attributes:\t%X\nID:\t\t%llX\nMin Data:\t%zu\n"
+	       "Max Data:\t%zu\nMax Descs:\t%zu\n",
 	       (long)info.di_target,
 	       (unsigned long long)info.di_proc,
                (unsigned long long)info.di_data,
@@ -100,8 +100,8 @@ int client_process(void)
 		perror("door_getparam");
 
 	printf("Client %ld:\nPID:\t\t%ld\nProcedure:\t%llX\nCookie:\t\t%llx\n"
-	       "Attributes:\t%X\nID:\t\t%llX\nMin Data:\t\t%zu\n"
-	       "Max Data:\t\t%zu\nMax Descs:\t\t%zu\n",
+	       "Attributes:\t%X\nID:\t\t%llX\nMin Data:\t%zu\n"
+	       "Max Data:\t%zu\nMax Descs:\t%zu\n",
 	       (long)getpid(),
 	       (long)info.di_target,
 	       (unsigned long long)info.di_proc,
