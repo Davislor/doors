@@ -95,6 +95,20 @@ static size_t open_max;
 /* Have we already initialized the server? */
 static pthread_once_t is_server_ready = PTHREAD_ONCE_INIT;
 
+/* This key tells door_return() which file descriptor should receive
+ * the return data.
+ *
+ * It should be safe to pass by reference a variable from a calling
+ * function's stack, as that is thread-specific data whose lifetime has
+ * not expired.
+ */
+static pthread_key_t caller_fd;
+
+/* Each thread handling a door_call() also needs to free its allocated
+ * buffer.  We accomplish this by declaring it as a thread-specific key.
+*/
+static pthread_key_t arg_buf;
+
 /* Internal functions with file scope: */
 
 static void prepare_fork_handler(void)
@@ -158,6 +172,9 @@ static void server_init(void)
  *
  * More to the point, we could have destroyed the table after a fork() 
  * while leaving the once-control triggered and the lock intact.
+ *
+ * This function initializes the thread-specific data door_return()
+ * uses.
  */
 {
 	if ( 0 != pthread_rwlock_init( &door_table_lock, NULL ) )
@@ -168,6 +185,14 @@ static void server_init(void)
 	                          child_fork_handler )
            )
 		fatal_system_error(__FILE__, __LINE__, "pthread_atfork");
+
+	if ( 0 != pthread_key_create( &caller_fd, NULL ) )
+		fatal_system_error(__FILE__, __LINE__, "pthread_key_create");
+
+	if ( 0 != pthread_key_create( &arg_buf, free ) )
+		fatal_system_error(__FILE__, __LINE__, "pthread_key_create");
+
+	return;
 }
 
 static door_id_t get_unique_id (void)
@@ -356,7 +381,66 @@ static inline void unlock_door_table(void)
 	return;
 }
 
-static void handle_msg_request( int fd, const struct door_data* p )
+static void inline handle_door_call( int fd, const struct door_data* p )
+/* Reads a msg_door_call message from the connected socket fd, calls
+ * that thread's server procedure with the correct parameters, and if we
+ * return, it's because the procedure never called door_return().
+ */
+{
+	struct msg_door_call incoming;
+	void* argp = NULL;
+	ssize_t arg_size;
+
+	if ( 0 > recv( fd, &incoming, sizeof(incoming), 0 ) ) {
+		return;
+	}
+
+	if ( ! is_msg_door_call(&incoming) ) {
+/* If we're here and the next message isn't a door_call, something
+ * broke.  (Eliminate this check for speed?)
+ */
+		xmit_error( fd, EBADMSG );
+		return;
+	}
+
+	arg_size = msg_door_call_get_arg_size(&incoming);
+
+	if ( 0 > arg_size ||
+	     p->data_max < arg_size ||
+	     p->data_min > arg_size
+	   ) {
+		xmit_error( fd, ENOBUFS );
+		return;
+	}
+
+	pthread_setspecific( caller_fd, &fd );
+
+	if ( 0 != arg_size ) {
+		argp = malloc((size_t)arg_size);
+
+		if ( NULL == argp ) {
+			xmit_error( fd, ENOBUFS );
+			return;
+		}
+
+		pthread_setspecific( arg_buf, argp );
+	}
+
+/* We have stored the socket to send the results to where door_return()
+ * can retrieve it.  We know that arg_size is an appropriate amount of
+ * data; furthermore, if it is nonzero, argp points to a buffer large
+ * enough to hold it, and which will automatically be freed upon thread
+ * cancellation.
+ */
+	if ( arg_size != recv( fd, argp, (size_t)arg_size, 0 ) ) {
+		xmit_error( fd, EBADMSG );
+		return;
+	}
+
+	(p->server_proc)( p->cookie, argp, (size_t)arg_size, NULL, 0 );
+}
+
+static void inline handle_msg_request( int fd, const struct door_data* p )
 /* Reads a request message from the connected socket fd, generates a message
  * based on the information to which p points, and transmits that message
  * back.
@@ -368,18 +452,12 @@ static void handle_msg_request( int fd, const struct door_data* p )
 	struct msg_request incoming;
 
 	if ( 0 > recv( fd, &incoming, sizeof(incoming), 0 ) ) {
-		close(fd);
 		return;
 	}
 
 	if ( ! is_msg_request(&incoming) ) {
 /* If it's not an informational request, we shouldn't be here. */
-		struct msg_error outgoing;
-
-		msg_error_init( &outgoing, EINVAL );
-		send( fd, &outgoing, sizeof(outgoing), MSG_EOR );
-		close(fd);
-/* Linger? */
+		xmit_error( fd, EBADMSG );
 		return;
 	}
 
@@ -421,10 +499,7 @@ static void handle_msg_request( int fd, const struct door_data* p )
 			break;
 		}
 		default: { /* Bad or unknown request! */
-			struct msg_error outgoing;
-
-			msg_error_init( &outgoing, EINVAL );
-			send( fd, &outgoing, sizeof(outgoing), MSG_EOR );
+			xmit_error( fd, EINVAL );
 		}
 	}
 
@@ -444,7 +519,7 @@ static void* connection_listen( void* connection_ptr )
 	const int fd = ((struct door_connect_t*)connection_ptr)->listen_fd;
 	struct door_data* const p =
 ((struct door_connect_t*)connection_ptr)->data_ptr;
-	uint32_t code;	/* The incoming message code. */
+	long long int code;	/* The incoming message code. */
 
 /* Since we've already copied the data to local storage, we no longer need
  * the buffer.
@@ -452,22 +527,19 @@ static void* connection_listen( void* connection_ptr )
 	free(connection_ptr);
 
 /* Peek ahead at the type of the next message. */
-	while ( 0 <= recv( fd, &code, sizeof(code), MSG_PEEK ) ) {
+	while ( 0 <= ( code = message_type(fd) ) ) {
 		switch (code) {
-			case 1U:
+			case code_request:
 				handle_msg_request( fd, p );
 				break;
+			case code_door_call:
+				handle_door_call( fd, p );
+				break;
 			default: {
-				struct msg_error outgoing;
-
-				msg_error_init( &outgoing, ENOTSUP );
-				send( fd,
-				      &outgoing,
-				      sizeof(outgoing),
-				      MSG_EOR
-				    );
+				xmit_error( fd, ENOTSUP );
 /* We could check for the MSG_EOR flag in recvmsg() to recover from this
- * error.  We could at least linger.  At present, we just close the socket.
+ * error.  We could at least linger.  At present, we just close the
+ * socket.
  */
 				close(fd);
 			}
@@ -784,9 +856,6 @@ int door_create(
 	p->data_min = 0;
 	p->data_max = (size_t)default_buf - DOOR_CALL_RESERVED;
 
-/* This is thread-safe, or at least absent from the list of functions 
- * allowed not to be.
- */
 	if ( 0 != spawn_door_server(did) ) {
 		close(did);
 		return ERROR;
@@ -886,7 +955,7 @@ int door_getparam (int d, int param, size_t* out)
 		if ( 0 > recv( d, &type, sizeof(type), MSG_PEEK ) )
 			return ERROR;
 
-		if ( 3U == type ) {
+		if ( code_door_getparam == type ) {
 			struct msg_door_getparam incoming;
 
 			if (
@@ -896,7 +965,7 @@ int door_getparam (int d, int param, size_t* out)
 
 			*out =  msg_door_getparam_decode(&incoming);
 		}
-		else if ( 0U == type ) {
+		else if ( code_error == type ) {
 			struct msg_error incoming;
 
 			if (
@@ -934,7 +1003,7 @@ int door_getparam (int d, int param, size_t* out)
 	return SUCCESS;
 }
 
-int door_info (int d, struct door_info* info)
+int door_info( int d, struct door_info* info )
 /* See the SunOS 5.11 manual for a specification of how this function 
  * should work.
  */
@@ -958,16 +1027,22 @@ int door_info (int d, struct door_info* info)
 	   ) {
 /* Not a local door. */
 		struct msg_request outgoing;
-		struct msg_door_info incoming;
+		long long int code;
 
 		msg_request_init( &outgoing, REQ_DOOR_INFO );
 		if ( 0 > send( d, &outgoing, sizeof(outgoing), MSG_EOR ) )
 			return ERROR;
 
-		if ( 0 > recv( d, &incoming, sizeof(incoming), 0 ) )		
-			return ERROR;
+		code = message_type(d);
 
-		if ( is_msg_door_info(&incoming) ) {
+		if ( code_door_info == code ) {
+			struct msg_door_info incoming;
+
+			if (
+0 > recv( d, &incoming, sizeof(incoming), 0 )
+			   )
+				return EBADMSG;
+
 			msg_door_info_decode( &incoming, info );
 
 			if ( getpid() == (pid_t)info->di_target )
@@ -975,11 +1050,15 @@ int door_info (int d, struct door_info* info)
 
 			return SUCCESS;
 		}
-		else if (
-is_msg_error((const struct msg_error*)&incoming)
-		        ) {
-			errno =
-msg_error_decode((const struct msg_error*)&incoming);
+		else if ( code_error == code ) {
+			struct msg_error incoming;
+
+			if (
+0 > recv( d, &incoming, sizeof(incoming), 0 )
+			   )
+				return EBADMSG;
+
+			errno = msg_error_decode(&incoming);
 			return ERROR;
 		}
 		else {
@@ -1012,7 +1091,72 @@ msg_error_decode((const struct msg_error*)&incoming);
 	return SUCCESS;
 }
 
-int door_revoke (int d)
+int door_return( char* restrict data_ptr,
+                 size_t data_size,
+                 door_desc_t* restrict desc_ptr,
+                 uint_t num_desc
+               )
+/* See the SunOS 5.11 man page for a specification for how the function
+ * should work.
+ *
+ * Known bugs:
+ * - Passing door descriptors is not supported yet.  Any attempt to do
+ * so will fail with EMFILE.
+ *
+ * Known incompatibilities:
+ * - The pointer arguments now have the restrict qualifier.  No sane
+ * code should ever have returned an array of door_desc_t structures as
+ * an argument anyway.
+ *
+ * Other limitations:
+ * - There should be a way to tell the library to free a 
+ * dynamically-allocated buffer.  (Probably a separate function.)
+ * - The data_ptr argument should really be a pointer to void.
+ */
+{
+	static const int ERROR = -1;
+	int fd;
+	struct msg_door_return outgoing;
+	struct iovec send_iov[2];
+	const struct msghdr send_hdr = {
+		.msg_iov = send_iov,
+		.msg_iovlen = 2
+	};
+
+	if ( ( NULL == data_ptr && 0 != data_size ) ||
+	     ( NULL == desc_ptr && 0 != num_desc )
+	   ) {
+		errno = EFAULT;
+		return ERROR;
+	}
+
+	if ( 0 != num_desc ) {
+		errno = EMFILE;
+		return ERROR;
+	}
+
+	fd = *(int*)pthread_getspecific(caller_fd);
+
+	msg_door_return_init( &outgoing, data_size );
+
+	send_iov[0].iov_base = &outgoing;
+	send_iov[0].iov_len = sizeof(outgoing);
+
+	send_iov[1].iov_base = data_ptr;
+	send_iov[1].iov_len = data_size;
+
+	if ( 0 > sendmsg( fd, &send_hdr, MSG_EOR ) ) {
+		errno = EINVAL;
+		return ERROR;
+	}
+
+/* Everything worked, so kill this thread. */
+	pthread_exit(NULL);
+
+/* NOTREACHED */
+}
+
+int door_revoke( int d )
 /* See the SunOS 5.11 manual for a specification of how this function 
  * works.
  *
@@ -1025,7 +1169,8 @@ int door_revoke (int d)
  * effort to guarantee that door operations are atomic.
  *
  * FIXME: Never, ever, ever free the door_table entry while any other 
- * thread might hold a pointer to it!  Lock it!
+ * thread might hold a pointer to it!  The program will crash!  Keep a
+ * reference count.
  */
 {
 	static const int ERROR = -1;

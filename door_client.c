@@ -162,7 +162,7 @@ int door_call( int door, door_arg_t* params )
 	incoming_code = message_type(door);
 	if ( 0 > incoming_code )
 		return ERROR;
-	else if ( 0 == incoming_code ) {
+	else if ( code_error == incoming_code ) {
 /* We received an error message back. */
 		struct msg_error incoming;
 
@@ -173,8 +173,8 @@ int door_call( int door, door_arg_t* params )
 
 		errno = msg_error_decode(&incoming);
 		return ERROR;
-	} /* end if ( 0 == incoming_code ) */
-	else if ( 5U == incoming_code ) {
+	} /* end if ( code_error == incoming_code ) */
+	else if ( code_door_return == incoming_code ) {
 /* The server responded with a door_return message, as expected. */
 		struct msg_door_return incoming;
 		ssize_t return_size, bytes_read;
@@ -191,10 +191,10 @@ int door_call( int door, door_arg_t* params )
 			if ( 0 != return_size ) {
 				errno = ENOMEM;
 				return ERROR;
-			}
+			} /* end if ( 0 != return_size ) */
 
 			return SUCCESS;
-		}
+		} /* end if ( NULL == params ) */
 
 		if ( 0 > return_size ) {
 /* The door returned too much data for us to even address! */
@@ -215,7 +215,7 @@ int door_call( int door, door_arg_t* params )
 				return ERROR;
 			}
 			new_buffer = true;
-		}
+		} /* end if ( (size_t)return_size > params->rsize ) */
 		else
 			return_buf = params->rbuf;
 
@@ -237,7 +237,7 @@ int door_call( int door, door_arg_t* params )
 			params->rsize = 0;
 			errno = EBADMSG;
 			return ERROR;
-		}
+		} /* end if( bytes_read < return_size ) */
 		else {
 /* We read the correct amount of data. */
 			params->rbuf = return_buf;
@@ -246,8 +246,8 @@ int door_call( int door, door_arg_t* params )
 			params->data_size = (size_t)return_size;
 
 			return SUCCESS;
-		} /* end if (result of recv()). */
-	}
+		} /* end if (result of recv() ). */
+	} /* end if ( type of message received ) */
 
 /* We received the wrong kind of message. */
 	close(door);

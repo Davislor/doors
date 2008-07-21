@@ -78,12 +78,15 @@ typedef struct door_info {
 	door_id_t	di_uniquifier;
 } door_info_t;
 
-/* For source-compatibility, the typedef is necessary: */
+/* For source-compatibility, the typedef is necessary.  I introduce a
+ * slight change to the API that shouldn't break anything, in that the
+ * data_ptr and rbuf members are pointers to void here.
+ */
 typedef struct door_arg_t {
 	void*		data_ptr; /* Points to data */
 	door_desc_t*	desc_ptr; /* Currently unsupported.  Use NULL. */
 	size_t		data_size; /* Size of data. */
-	size_t		desc_num; /* Currently unsupported.  Use 0. */
+	uint_t		desc_num; /* Currently unsupported.  Use 0. */
 	void*		rbuf; /* Results buffer. */
 	size_t		rsize; /* Size of the results buffer. */
 } door_arg_t;

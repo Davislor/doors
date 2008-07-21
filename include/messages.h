@@ -20,6 +20,15 @@
 #define DOOR_CALL_RESERVED	(sizeof(struct msg_door_call))
 #define DOOR_RETURN_RESERVED	(sizeof(struct msg_door_return))
 
+enum msg_code {
+	code_error = 0,
+	code_request = 1,
+	code_door_info = 2,
+	code_door_getparam = 3,
+	code_door_call = 4,
+	code_door_return = 5
+};
+
 #define REQ_DOOR_INFO		0
 
 /* Message types are 32-bit unsigned integers.  Therefore, the only
@@ -46,7 +55,7 @@ static inline struct msg_error* msg_error_init( struct msg_error* p,
                                                 int e
                                               )
 {
-	p->code = 0;
+	p->code = (uint32_t)code_error;
 	p->value = (int32_t)e;
 
 	return p;
@@ -57,15 +66,30 @@ static inline int msg_error_decode( const struct msg_error* p )
 	return (int)(p->value);
 }
 
+static inline int xmit_error( int fd, int error )
+{
+	const struct msg_error outgoing = {
+		.code = (uint32_t)code_error,
+		.value = (int32_t)error
+	};
+
+	return send( fd, &outgoing, sizeof(outgoing), MSG_EOR );
+}
+
 struct msg_request {
 	uint32_t	code;
 	uint32_t	request;
 };
 
+static inline bool is_msg_request( const struct msg_request* p )
+{
+	return (uint32_t)code_request == p->code;
+}
+
 static inline struct msg_request*
 msg_request_init( struct msg_request* p, unsigned int request )
 {
-	p->code = 1U;
+	p->code = (uint32_t)code_request;
 	p->request = request;
 
 	return p;
@@ -95,7 +119,7 @@ msg_door_info_init( struct msg_door_info* p,
                     door_id_t id
                   )
 {
-	p->code = 2U;
+	p->code = (uint32_t)code_door_info;
 	p->attr = (uint32_t)attr;
 	p->target = (uint64_t)target;
 	p->proc = 0;
@@ -132,7 +156,7 @@ msg_door_getparam_init( struct msg_door_getparam* p,
                         size_t val
                       )
 {
-	p->code = 3U;
+	p->code = (uint32_t)code_door_getparam;
 	p->param = (uint32_t)param;
 	p->value = (uint64_t)val;
 
@@ -151,16 +175,30 @@ struct msg_door_call {
 	uint64_t	arg_size;
 };
 
+static inline bool is_msg_door_call( const struct msg_door_call* p )
+{
+	return (uint32_t)code_door_call == p->code;
+}
+
 static inline struct msg_door_call*
 msg_door_call_init( struct msg_door_call* p,
                     size_t data_size
                   )
 {
-	p -> code = 4U;
+	p -> code = (uint32_t)code_door_call;
 	p -> ndesc = 0U;
 	p -> arg_size = (uint64_t)data_size;
 
 	return p;
+}
+
+static inline ssize_t
+msg_door_call_get_arg_size( const struct msg_door_call* p )
+{
+	if ( SIZE_MAX < p->arg_size )
+		return -1;
+	else
+		return (ssize_t)(p->arg_size);
 }
 
 struct msg_door_return {
@@ -169,15 +207,25 @@ struct msg_door_return {
 	uint64_t        arg_size;
 };
 
-static ssize_t
+static inline struct msg_door_return*
+msg_door_return_init( struct msg_door_return* p, size_t data_size )
+{
+	p->code = (uint32_t)code_door_return;
+	p->ndesc = 0;
+	p->arg_size = (uint64_t)data_size;
+
+	return p;
+}
+
+static inline ssize_t
 msg_door_return_get_data_size( const struct msg_door_return* p )
 {
 	if ( SIZE_MAX < p->arg_size ) {
 /* The server returned more data than our memory model can support! */
 		return -1;
 	}
-	else
-		return (ssize_t)(p->arg_size);
+
+	return (ssize_t)(p->arg_size);
 }
 
 #endif /* !defined(H_MESSAGES) */
