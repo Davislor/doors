@@ -37,11 +37,6 @@
  */
 static const size_t open_default = 1024U;
 
-/* Converted into a 64-bit unsigned integer, and thence into an unsigned
- * long long, by door_info().
- */
-typedef void (*server_proc_t) (void*, char*, size_t, door_desc_t*, uint_t);
-
 /* Several functions manipulate the door_table, which is an array of 
  * OPEN_MAX door_data structures.  A file descriptor fd refers to a 
  * valid, local door if and only if door_table[fd] holds valid data.
@@ -316,7 +311,7 @@ static struct door_data** resize_door_table( int did )
 /* Once we hold the lock, if did < open_max, we were in a race to resize 
  * the table, we lost, and we must not truncate door_table.
  */
-	if ( did >= open_max ) {
+	if ( (size_t)did >= open_max ) {
 /* Round up to the next kibi. */
 		guess = ( (size_t)did + 1024 ) & ~(size_t)1023;
 
@@ -411,8 +406,8 @@ static void inline handle_door_call( int fd, const struct door_data* p )
 	arg_size = msg_door_call_get_arg_size(&incoming);
 
 	if ( 0 > arg_size ||
-	     p->data_max < arg_size ||
-	     p->data_min > arg_size
+	     p->data_max < (size_t)arg_size ||
+	     p->data_min > (size_t)arg_size
 	   ) {
 		xmit_error( fd, ENOBUFS );
 		return;
@@ -442,7 +437,7 @@ static void inline handle_door_call( int fd, const struct door_data* p )
 	read_iovs[1].iov_base = argp;
 	read_iovs[1].iov_len = (size_t)arg_size;
 
-	if ( sizeof(struct msg_door_call) + arg_size !=
+	if ( (ssize_t)sizeof(struct msg_door_call) + arg_size !=
 	     recvmsg( fd, &read_hdr, MSG_WAITALL )
 	   ) {
 		xmit_error( fd, EBADMSG );
@@ -646,7 +641,7 @@ static int spawn_door_server( int d )
 	sigset_t old_mask;
 	int retval;
 
-	if ( d < 0 || d >= open_max ) {
+	if ( d < 0 || (size_t)d >= open_max ) {
 		errno = EBADF;
 		return ERROR;
 	}
@@ -813,7 +808,7 @@ int door_create(
 	if ( 0 > ( did = socket( AF_UNIX, SOCK_SEQPACKET, 0 ) ) )
 		return ERROR;
 
-	if ( did >= open_max )
+	if ( (size_t)did >= open_max )
 /* Our table is too small.  Better resize. */
 		if ( NULL == resize_door_table(did) ) {
 			close(did);
@@ -832,7 +827,7 @@ int door_create(
 		return ERROR;
 	}
 
-	assert( default_buf > DOOR_CALL_RESERVED );
+	assert( default_buf > (int)DOOR_CALL_RESERVED );
 
 /* It makes no sense to keep a door open after exec(), as even if the
  * new program is also a door server, it won't know about this door.
@@ -953,8 +948,8 @@ int door_getparam (int d, int param, size_t* out)
 	}
 
 	if ( ( NULL == door_table ) ||
-	     ( d >= open_max ) ||
 	     ( 0 > d ) ||
+	     ( (size_t)d >= open_max ) ||
 	     ( NULL == door_table[d] )
 	   ) {
 /* Not a local door. */
@@ -1033,8 +1028,8 @@ int door_info( int d, struct door_info* info )
 	}
 
 	if ( ( NULL == door_table ) ||
-	     ( open_max <= d ) ||
 	     ( 0 > d ) ||
+	     ( (size_t)d >= open_max ) ||
 	     ( NULL == door_table[d] )
 	   ) {
 /* Not a local door. */
@@ -1191,8 +1186,8 @@ int door_revoke( int d )
 	lock_door_table();
 
 	if ( ( NULL == door_table ) ||
-	     ( open_max <= d ) ||
 	     ( 0 > d ) ||
+	     ( (size_t)d >= open_max ) ||
 	     ( NULL == door_table[d] )
 	   ) {
 		errno = EBADF;
@@ -1230,8 +1225,8 @@ int door_setparam ( int d, int param, size_t val )
 	unlock_door_table();
 
 	if ( ( NULL == door_table ) ||
-	     ( d >= open_max ) ||
 	     ( 0 > d ) ||
+	     ( (size_t)d >= open_max ) ||
 	     ( NULL == p )
 	   ) {
 		errno = EBADF;

@@ -31,6 +31,8 @@ enum msg_code {
 
 #define REQ_DOOR_INFO		0
 
+typedef void (*server_proc_t) (void*, char*, size_t, door_desc_t*, uint_t);
+
 /* Message types are 32-bit unsigned integers.  Therefore, the only
  * standard type guaranteed to hold any message type, or the value -1,
  * is a signed long long int.
@@ -113,7 +115,7 @@ struct msg_door_info {
 static inline struct msg_door_info*
 msg_door_info_init( struct msg_door_info* p,
                     pid_t target,
-                    void (*proc)(),
+                    server_proc_t proc,
                     void* cookie,
                     door_attr_t attr,
                     door_id_t id

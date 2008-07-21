@@ -91,8 +91,6 @@ typedef struct door_arg_t {
 	size_t		rsize; /* Size of the results buffer. */
 } door_arg_t;
 
-typedef void (* _door_thread_proc) ();
-
 /* Status flags: */
 #define DOOR_UNREF		0x001
 #define DOOR_UNREF_MULTI	0x002
@@ -140,6 +138,8 @@ extern int door_return( RESTRICT char* data_ptr,
 extern int door_revoke(int d);
 
 /* Currently unimplemented. */
+typedef void (* _door_thread_proc) (door_info_t*);
+
 extern _door_thread_proc
 door_server_create( _door_thread_proc create_proc );
 

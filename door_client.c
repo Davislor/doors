@@ -40,7 +40,7 @@ static void client_init(void)
 	x = sysconf(_SC_PAGE_SIZE);
 
 /* Are our values sane? */
-	assert( 0 < x && SIZE_MAX > x );
+	assert( 0 < x && SIZE_MAX > (unsigned long)x );
 /* Should also check that the result is suitable for posix_memalign().
  * I.e., a power of 2 and a multiple of sizeof(void*).
  */
@@ -237,7 +237,9 @@ int door_call( int door, door_arg_t* params )
 
 		bytes_read = recvmsg( door, &recv_hdr, MSG_WAITALL );
 
-		if ( sizeof(incoming) + return_size != bytes_read ) {
+		if ( (ssize_t)sizeof(incoming) + return_size !=
+		     bytes_read
+		   ) {
 /* Failed to read the data that should be there. */
 			if (new_buffer)
 				free(return_buf);
