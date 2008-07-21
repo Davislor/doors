@@ -1,0 +1,24 @@
+Portland Doors is Copyright (C) 2008 Loren B. Davis.  All rights 
+reserved.  It is released under the GNU LGPL version 3 (see COPYING) and 
+provided with NO WARRANTY.
+
+Credits (as of 21 July 2008)
+
+Sun Microsystems designed and implemented the original Doors library.
+
+Jason Lango <jal@rampant.org> created Doors/Linux, the first 
+implementation of Doors for Linux.
+
+Loren Davis <davisl@cs.pdx.edu> created Portland Doors.
+
+Google, Inc. provided funding as part of its Summer of Code 2008 
+program.
+
+Portland State University sponsored this project, providing resources, 
+contacts and infrastructure.
+
+Greg Kroah-Hartman <gregkh@suse.de> contributed guidance and patches 
+for the build environment.
+
+Bart Massey <bart@cs.pdx.edu> contributed much advice, and help with 
+tools.
