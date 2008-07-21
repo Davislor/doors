@@ -7,7 +7,7 @@ PACKAGE = portland_doors
 
 CC = gcc
 
-CFLAGS		+= -g -pipe -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 -O2 -std=c99
+CFLAGS		+= -g -pipe -D_FILE_OFFSET_BITS=64 -O2 -std=c99 -combine
 
 WARNINGS	= -Wall -Wstrict-prototypes -Wsign-compare -Wshadow \
 		  -Wchar-subscripts -Wmissing-declarations -Wnested-externs \
@@ -19,6 +19,7 @@ CFLAGS		+= $(WARNINGS)
 CFLAGS		+= $(IFLAGS)
 LDFLAGS		+= -Wl,-warn-common,--as-needed
 
+INSTALLPATH	= /usr/local/lib
 
 # On GCC, set CFLAGS to include -std=c99 -m64 -Wall -pedantic
 # On Linux, set LIBS to -pthread
@@ -27,19 +28,19 @@ LIBS = -pthread
 
 # what are the actual library files here?
 
-PROGRAMS = 	error1		\
-		localserver1	\
-		localserver2	\
-		get_unique_id	\
-		socketpair1	\
-		client-server2	\
-		door_call1
+PROGRAMS = 	test/error1		\
+		test/localserver2	\
+		test/get_unique_id	\
+		test/socketpair1	\
+		test/client-server2	\
+		test/door_call1
 
-OBJS =		get_unique_id.o	\
-		error.o		\
-		error1.o	\
-		sun1.o		\
-		door_server.o	\
+OBJS =		test/get_unique_id.o	\
+		test/error1.o		\
+		test/sun1.o		\
+		door_server.o		\
+		door_client.o		\
+		error.o
 
 HEADERS = 	include/error.h		\
 		include/door.h		\
@@ -67,75 +68,71 @@ all: $(PROGRAMS)
 # build stuff by hand.  This needs to be cleaned up into the core library and
 # the individual test programs.
 
-get_unique_id: get_unique_id.o error.o
+test/get_unique_id: test/get_unique_id.o error.o
 	$(E) "  CC	" $@
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o get_unique_id \
-get_unique_id.o error.o
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/get_unique_id \
+test/get_unique_id.o error.o
 
-get_unique_id.o: test/get_unique_id.c include/door.h include/standards.h
-	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c test/get_unique_id.c
+test/get_unique_id.o: test/get_unique_id.c include/door.h include/standards.h
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) -o test/get_unique_id.o -c test/get_unique_id.c
 
-sun1: sun1.o error.o door_server.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o sun1 \
-sun1.o error.o door_server.o
+test/sun1: test/sun1.o error.o door_server.o
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/sun1 \
+test/sun1.o error.o door_server.o
 
-error1: error.o error1.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o error1 \
-error.o error1.o
+test/error1: error.o test/error1.o
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o error1 test/error1.o error.o
 
-error1.o: test/error1.c include/door.h include/standards.h include/error.h
-	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c test/error1.c
+test/error1.o: test/error1.c include/door.h include/standards.h include/error.h
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) -o test/error1.o -c test/error1.c
 
-door_client.o: door_client.c include/door.h include/standards.h
-	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c door_client.c
+test/localserver1: test/localserver1.o door_server.o test/error.o
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/localserver1 \
+test/localserver1.o door_server.o error.o
 
-localserver1: localserver1.o door_server.o error.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o localserver1 \
-localserver1.o door_server.o error.o
+test/localserver1.o: test/localserver1.c include/door.h include/error.h include/standards.h
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) -o test/localserver1.o -c test/localserver1.c
 
-localserver1.o: test/localserver1.c include/door.h include/error.h include/standards.h
-	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c test/localserver1.c
+test/localserver2: test/localserver2.o door_server.o error.o
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/localserver2 \
+test/localserver2.o door_server.o error.o
 
-localserver2: localserver2.o door_server.o error.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o localserver2 \
-localserver2.o door_server.o error.o
+test/localserver2.o: test/localserver1.c include/door.h include/error.h include/standards.h
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) -o test/localserver2.o -c test/localserver2.c
 
-localserver2.o: test/localserver1.c include/door.h include/error.h include/standards.h
-	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c test/localserver2.c
+test/socketpair1: test/socketpair1.o door_server.o error.o
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/socketpair1 \
+test/socketpair1.o door_server.o error.o
 
-socketpair1: socketpair1.o door_server.o error.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o socketpair1 \
-socketpair1.o door_server.o error.o
-
-socketpair1.o: test/socketpair1.c include/door.h include/messages.h \
+test/socketpair1.o: test/socketpair1.c include/door.h include/messages.h \
 include/standards.h
-	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c test/socketpair1.c
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) -o test/socketpair1.o -c test/socketpair1.c
 
-client-server1.o: test/client-server1.c include/door.h include/messages.h \
+test/client-server1.o: test/client-server1.c include/door.h include/messages.h \
 include/standards.h
-	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c test/client-server1.c
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) -o test/client-server1.o -c test/client-server1.c
 
-client-server1: client-server1.o error.o door_client.o door_server.o
+test/client-server1: test/client-server1.o error.o door_client.o door_server.o
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
--o client-server1 client-server1.o door_client.o door_server.o error.o
+-o test/client-server1 test/client-server1.o door_client.o door_server.o error.o
 
-client-server2.o: test/client-server2.c include/door.h include/standards.h
-	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c test/client-server2.c
+test/client-server2.o: test/client-server2.c include/door.h include/standards.h
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) -o test/client-server2.o -c test/client-server2.c
 
-client-server2: client-server2.o door_client.o door_server.o error.o
+test/client-server2: test/client-server2.o door_client.o door_server.o error.o
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
--o client-server2 client-server2.o door_client.o door_server.o error.o
+-o test/client-server2 test/client-server2.o door_client.o door_server.o error.o
 
-door_call1: door_call1.o door_client.o door_server.o error.o
+test/door_call1: test/door_call1.o door_client.o door_server.o error.o
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
--o door_call1 door_call1.o door_client.o door_server.o error.o
+-o test/door_call1 test/door_call1.o door_client.o door_server.o error.o
 
-door_call1.o: test/door_call1.c include/door.h include/error.h include/standards.h
-	$(CC) $(CFLAGS) $(DEBUGFLAGS) -c test/door_call1.c
+test/door_call1.o: test/door_call1.c include/door.h include/error.h include/standards.h
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) -o test/door_call1.o -c test/door_call1.c
 
 clean:
 	$(E) "  CLEAN"
-	$(Q) -rm -f *.o $(PROGRAMS)
+	$(Q) -rm -f *.o $(PROGRAMS) $(OBJS)
 .PHONY: clean
 
 release:

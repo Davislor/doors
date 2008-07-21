@@ -1,6 +1,7 @@
 #include "standards.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,6 +9,16 @@
 
 #include "door.h"
 #include "error.h"
+
+void echo( void* restrict,
+           char* restrict,
+           size_t,
+           door_desc_t* restrict,
+           uint_t
+         );
+
+void client_proc(void);
+void server_proc(void);
 
 static const char* const door_path = "/tmp/door";
 
@@ -26,7 +37,13 @@ void echo( void* restrict stream,
 	fputc( '\n', (FILE*)stream );
 	fflush((FILE*)stream);
 
-	door_return( (char*)&len, sizeof(len), NULL, 0 );
+	if ( 0 != door_return( (char*)&len, sizeof(len), NULL, 0 ) )
+		fatal_system_error(__FILE__,__LINE__,"door_return");
+
+	fprintf( stderr,
+	         "Error: door_return returned \"successfully\"!"
+	       );
+	exit(EXIT_FAILURE);
 }
 
 void server_proc(void)
@@ -84,6 +101,8 @@ void client_proc(void)
 
 int main(void)
 {
+	errno = 0;
+
 	server_proc();
 	client_proc();
 
