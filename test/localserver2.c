@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 
+void nop_server( void*, char*, size_t, door_desc_t*, uint_t );
+
 void nop_server( void* cookie,
                  char* argp,
                  size_t arg_size,

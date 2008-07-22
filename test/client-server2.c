@@ -10,6 +10,16 @@
 
 #include "door.h"
 
+void dummy_server( void* restrict,
+                   char* restrict,
+                   size_t,
+                   door_desc_t* restrict,
+                   uint_t
+                 );
+
+int server_process(void);
+int client_process(void);
+
 const char* const door_path = "/tmp/door";
 static const int nclients = 4;
 

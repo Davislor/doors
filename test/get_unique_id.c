@@ -25,7 +25,10 @@ typedef union
 } id_bitfield_t;
 #endif
 
-static door_id_t get_unique_id (void)
+static door_id_t get_unique_id(void);
+static void* spawn_id(void*);
+
+static door_id_t get_unique_id(void)
 /* Returns an identifier intended to be unique among all doors on the
  * system.  The current algorithm generates a 64-bit ID from the
  * following fields: the PID of the calling process (mod 2^19-1), the
