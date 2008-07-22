@@ -35,9 +35,9 @@ PROGRAMS = 	test/error1		\
 		test/client-server2	\
 		test/door_call1
 
-DOOR_OBJS =	door_server.o		\
-		door_client.o		\
-		error.o
+DOOR_OBJS =	door_server.lo	\
+		door_client.lo	\
+		error.lo
 
 OBJS =		test/get_unique_id.o	\
 		test/error1.o		\
@@ -68,6 +68,25 @@ all: $(PROGRAMS)
 
 # build stuff by hand.  This needs to be cleaned up into the core library and
 # the individual test programs.
+
+libdoor.la: door_client.lo door_server.lo error.lo
+	libtool --mode=link \
+$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) -o libdoor.la \
+door_client.lo door_server.lo error.lo -rpath /usr/local/lib
+
+door_client.lo: door_client.c include/standards.h include/door.h \
+include/error.h include/messages.h
+	libtool --mode=compile $(CC) $(CFLAGS) $(DEBUGFLAGS) -c \
+door_client.c
+
+door_server.lo: door_server.c include/standards.h include/door.h \
+include/error.h include/messages.h
+	libtool --mode=compile $(CC) $(CFLAGS) $(DEBUGFLAGS) -c \
+door_server.c
+
+error.lo: include/standards.h include/error.h error.c
+	libtool --mode=compile $(CC) $(CFLAGS) $(DEBUGFLAGS) -c \
+error.c
 
 test/get_unique_id: test/get_unique_id.o error.o
 	$(E) "  CC	" $@
@@ -107,7 +126,8 @@ test/door_call1: test/door_call1.o door_client.o door_server.o error.o
 
 clean:
 	$(E) "  CLEAN"
-	$(Q) -rm -f *.o test/*.o $(PROGRAMS) $(DOOR_OBJS) $(OBJS)
+	$(Q) -rm -f *.o test/*.o $(PROGRAMS) $(DOOR_OBJS) $(OBJS) \
+libdoor.la
 .PHONY: clean
 
 release:
@@ -119,4 +139,3 @@ release:
 	@ echo
 	git-archive --format=tar --prefix=$(PACKAGE)-$(VERSION)/ HEAD | gzip -9v > $(PACKAGE)-$(VERSION).tar.gz
 .PHONY: release
-
