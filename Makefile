@@ -58,7 +58,7 @@ endif
 export E Q
 
 
-all: $(PROGRAMS)
+all: libdoor.la $(PROGRAMS)
 
 # build the objects
 %.o: %.c $(HEADERS)
@@ -93,46 +93,47 @@ error.lo: include/standards.h include/error.h error.c
 	libtool --mode=compile $(CC) $(CFLAGS) $(DEBUGFLAGS) -c \
 error.c
 
-test/get_unique_id: test/get_unique_id.o error.o
+test/get_unique_id: test/get_unique_id.o libdoor.a
 	$(E) "  CC	" $@
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/get_unique_id \
-test/get_unique_id.o error.o
+test/get_unique_id.o libdoor.a
 
-test/sun1: test/sun1.o error.o door_server.o
+test/sun1: test/sun1.o libdoor.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/sun1 \
-test/sun1.o error.o door_server.o
+test/sun1.o libdoor.a
 
-test/error1: error.o test/error1.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/error1 test/error1.o error.o
+test/error1: test/error1.o libdoor.a
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/error1 \
+test/error1.o libdoor.a
 
-test/localserver1: test/localserver1.o door_server.o test/error.o
+test/localserver1: test/localserver1.o libdoor.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/localserver1 \
-test/localserver1.o door_server.o error.o
+test/localserver1.o libdoor.a
 
-test/localserver2: test/localserver2.o door_server.o error.o
+test/localserver2: test/localserver2.o libdoor.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/localserver2 \
-test/localserver2.o door_server.o error.o
+test/localserver2.o libdoor.a
 
-test/socketpair1: test/socketpair1.o door_server.o error.o
+test/socketpair1: test/socketpair1.o libdoor.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/socketpair1 \
-test/socketpair1.o door_server.o error.o
+test/socketpair1.o libdoor.a
 
-test/client-server1: test/client-server1.o error.o door_client.o door_server.o
+test/client-server1: test/client-server1.o libdoor.a
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
--o test/client-server1 test/client-server1.o door_client.o door_server.o error.o
+-o test/client-server1 test/client-server1.o libdoor.a
 
-test/client-server2: test/client-server2.o door_client.o door_server.o error.o
+test/client-server2: test/client-server2.o libdoor.a
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
--o test/client-server2 test/client-server2.o door_client.o door_server.o error.o
+-o test/client-server2 test/client-server2.o libdoor.a
 
-test/door_call1: test/door_call1.o door_client.o door_server.o error.o
+test/door_call1: test/door_call1.o libdoor.a
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
--o test/door_call1 test/door_call1.o door_client.o door_server.o error.o
+-o test/door_call1 test/door_call1.o libdoor.a
 
 clean:
 	$(E) "  CLEAN"
 	$(Q) -rm -f *.o test/*.o $(PROGRAMS) $(DOOR_OBJS) $(OBJS) \
-libdoor.la
+libdoor.la libdoor.a
 .PHONY: clean
 
 release:
