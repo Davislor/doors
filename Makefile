@@ -107,7 +107,7 @@ test/door_call1: test/door_call1.o door_client.o door_server.o error.o
 
 clean:
 	$(E) "  CLEAN"
-	$(Q) -rm -f *.o $(PROGRAMS) $(DOOR_OBJS) $(OBJS)
+	$(Q) -rm -f *.o test/*.o $(PROGRAMS) $(DOOR_OBJS) $(OBJS)
 .PHONY: clean
 
 release:
