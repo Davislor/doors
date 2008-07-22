@@ -81,7 +81,7 @@ test/sun1: test/sun1.o error.o door_server.o
 test/sun1.o error.o door_server.o
 
 test/error1: error.o test/error1.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o error1 test/error1.o error.o
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/error1 test/error1.o error.o
 
 test/error1.o: test/error1.c include/door.h include/standards.h include/error.h
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) -o test/error1.o -c test/error1.c
