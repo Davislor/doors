@@ -69,6 +69,11 @@ all: $(PROGRAMS)
 # build stuff by hand.  This needs to be cleaned up into the core library and
 # the individual test programs.
 
+libdoor.a: door_client.lo door_server.lo error.lo
+	libtool --mode=link \
+$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) -o libdoor.a \
+door_client.lo door_server.lo error.lo
+
 libdoor.la: door_client.lo door_server.lo error.lo
 	libtool --mode=link \
 $(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) -o libdoor.la \
