@@ -1090,7 +1090,7 @@ int door_info( int d, struct door_info* info )
 	info->di_proc = (door_ptr_t)scratch;
 
 /* On the other hand, pointers to void do convert to integral types. */
-	info->di_data = (door_ptr_t)(p->cookie);
+	info->di_data = (door_ptr_t)(uintptr_t)(p->cookie);
 
 	info->di_attributes = p->attr | DOOR_LOCAL;
 	info->di_uniquifier = p->id;

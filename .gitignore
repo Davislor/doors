@@ -1,5 +1,6 @@
 *.o
 *.lo
+*~
 libdoor.a
 libdoor.la
 libdoor.so
@@ -11,3 +12,5 @@ test/localserver1
 test/localserver2
 test/socketpair1
 .libs
+.dotest
+

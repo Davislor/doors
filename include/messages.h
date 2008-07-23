@@ -126,7 +126,7 @@ msg_door_info_init( struct msg_door_info* p,
 	p->target = (uint64_t)target;
 	p->proc = 0;
 	memcpy( &p->proc, &proc, sizeof(proc) );
-	p->cookie = (uint64_t)cookie;
+	p->cookie = (uint64_t)(uintptr_t)cookie;
 	p->id = (uint64_t)id;
 
 	return p;

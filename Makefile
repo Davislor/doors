@@ -7,7 +7,8 @@ PACKAGE = portland_doors
 
 CC = gcc
 
-CFLAGS		+= -g -pipe -D_FILE_OFFSET_BITS=64 -O2 -std=c99 -combine
+CFLAGS		+= -g -pipe -D_FILE_OFFSET_BITS=64 -std=c99 -O2 \
+-combine -pthread
 
 WARNINGS	= -Wall -Wstrict-prototypes -Wsign-compare -Wshadow \
 		  -Wchar-subscripts -Wmissing-declarations -Wnested-externs \
@@ -24,7 +25,6 @@ INSTALLPATH	= /usr/local/lib
 # On GCC, set CFLAGS to include -std=c99 -m64 -Wall -pedantic
 # On Linux, set LIBS to -pthread
 # On Solaris, set LIBS to -lpthread -lsocket
-LIBS = -pthread
 
 # what are the actual library files here?
 
@@ -69,9 +69,10 @@ all: libdoor.la $(PROGRAMS)
 # build stuff by hand.  This needs to be cleaned up into the core library and
 # the individual test programs.
 
-libdoor.a: $(DOOR_OBJS)
-	ar cq $@ door_client.o door_server.o error.o
-	ranlib $@
+libdoor.a: door_client.lo door_server.lo error.lo
+	libtool --mode=link \
+$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) -o libdoor.a \
+door_client.lo door_server.lo error.lo
 
 libdoor.la: door_client.lo door_server.lo error.lo
 	libtool --mode=link \
