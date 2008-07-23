@@ -5,7 +5,11 @@
 VERSION = 001
 PACKAGE = portland_doors
 
-CC = gcc
+CROSS_COMPILE ?=
+CC = $(CROSS_COMPILE)gcc
+LD = $(CROSS_COMPILE)ld
+AR = $(CROSS_COMPILE)ar
+RANLIB = $(CROSS_COMPILE)ranlib
 
 CFLAGS		+= -g -pipe -D_FILE_OFFSET_BITS=64 -std=c99 -O2 \
 -combine -pthread
@@ -35,9 +39,9 @@ PROGRAMS = 	test/error1		\
 		test/client-server2	\
 		test/door_call1
 
-DOOR_OBJS =	door_server.lo	\
-		door_client.lo	\
-		error.lo
+DOOR_OBJS =	door_server.o	\
+		door_client.o	\
+		error.o
 
 OBJS =		test/get_unique_id.o	\
 		test/error1.o		\
@@ -58,7 +62,7 @@ endif
 export E Q
 
 
-all: libdoor.la $(PROGRAMS)
+all: $(PROGRAMS)
 
 # build the objects
 %.o: %.c $(HEADERS)
@@ -69,29 +73,12 @@ all: libdoor.la $(PROGRAMS)
 # build stuff by hand.  This needs to be cleaned up into the core library and
 # the individual test programs.
 
-libdoor.a: door_client.lo door_server.lo error.lo
-	libtool --mode=link \
-$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) -o libdoor.a \
-door_client.lo door_server.lo error.lo
-
-libdoor.la: door_client.lo door_server.lo error.lo
-	libtool --mode=link \
-$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) -o libdoor.la \
-door_client.lo door_server.lo error.lo -rpath /usr/local/lib
-
-door_client.lo: door_client.c include/standards.h include/door.h \
-include/error.h include/messages.h
-	libtool --mode=compile $(CC) $(CFLAGS) $(DEBUGFLAGS) -c \
-door_client.c
-
-door_server.lo: door_server.c include/standards.h include/door.h \
-include/error.h include/messages.h
-	libtool --mode=compile $(CC) $(CFLAGS) $(DEBUGFLAGS) -c \
-door_server.c
-
-error.lo: include/standards.h include/error.h error.c
-	libtool --mode=compile $(CC) $(CFLAGS) $(DEBUGFLAGS) -c \
-error.c
+libdoor.a: $(DOOR_OBJS)
+	$(Q) rm -f $@
+	$(E) "  AR      " $@
+	$(Q) $(AR) cq $@ $(DOOR_OBJS)
+	$(E) "  RANLIB  " $@
+	$(Q) $(RANLIB) $@
 
 test/get_unique_id: test/get_unique_id.o libdoor.a
 	$(E) "  CC	" $@
