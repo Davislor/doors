@@ -17,6 +17,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <sys/un.h>
@@ -138,11 +139,13 @@ int door_call( int door, door_arg_t* params )
  * buffer.
  */
 			struct iovec send_iovs[2];
+			struct msghdr send_hdr;
 
-			const struct msghdr to_send = {
-				.msg_iov = send_iovs,
-				.msg_iovlen = 2
-			};
+			bzero( &send_iovs[0], 2*sizeof(struct iovec) );
+			bzero( &send_hdr, sizeof(send_hdr) );
+
+			send_hdr.msg_iov = send_iovs;
+			send_hdr.msg_iovlen = 2;
 
 			send_iovs[0].iov_base = &outgoing;
 			send_iovs[0].iov_len = sizeof(outgoing);
@@ -154,9 +157,9 @@ int door_call( int door, door_arg_t* params )
 			                    params->data_size
 			                  );
 
-			sendmsg( door, &to_send, MSG_EOR );
-		}
-	}
+			sendmsg( door, &send_hdr, MSG_EOR );
+		} /* end if (Passed in any descriptors?) */
+	} /* end if (Passed in any params?) */
 /* We've now sent the message, and await a msg_door_return in reply. */
 
 	incoming_code = message_type(door);
@@ -167,7 +170,7 @@ int door_call( int door, door_arg_t* params )
 		struct msg_error incoming;
 
 		if (
-0 > recv( door, &incoming, sizeof(incoming), 0)
+0 > recv( door, &incoming, sizeof(incoming), MSG_WAITALL )
 		   )
 			return ERROR;
 
@@ -181,10 +184,7 @@ int door_call( int door, door_arg_t* params )
 		void* return_buf = NULL;
 		bool new_buffer = false;
 		struct iovec recv_iovs[2];
-		struct msghdr recv_hdr = {
-			.msg_iov = recv_iovs,
-			.msg_iovlen = 2
-		};
+		struct msghdr recv_hdr;
 
 		if (
 0 > recv( door, &incoming, sizeof(incoming), MSG_PEEK ) 
@@ -229,6 +229,12 @@ int door_call( int door, door_arg_t* params )
 /* The return_buf variable now points to a buffer big enough to hold 
  * the requested data.
  */
+		bzero( recv_iovs, 2*sizeof(struct iovec) );
+		bzero( &recv_hdr, sizeof(recv_hdr) );
+
+		recv_hdr.msg_iov = recv_iovs;
+		recv_hdr.msg_iovlen = 2;
+
 		recv_iovs[0].iov_base = &incoming;
 		recv_iovs[0].iov_len = sizeof(incoming);
 

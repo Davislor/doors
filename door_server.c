@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -386,10 +387,7 @@ static void inline handle_door_call( int fd, const struct door_data* p )
 	void* argp = NULL;
 	ssize_t arg_size;
 	struct iovec read_iovs[2];
-	struct msghdr read_hdr = {
-		.msg_iov = read_iovs,
-		.msg_iovlen = 2
-	};
+	struct msghdr read_hdr;
 
 	if ( 0 > recv( fd, &incoming, sizeof(incoming), MSG_PEEK ) ) {
 		return;
@@ -431,6 +429,12 @@ static void inline handle_door_call( int fd, const struct door_data* p )
  * enough to hold it, and which will automatically be freed upon thread
  * cancellation.
  */
+	bzero( read_iovs, 2*sizeof(struct iovec) );
+	bzero( &read_hdr, sizeof(read_hdr) );
+
+	read_hdr.msg_iov = read_iovs;
+	read_hdr.msg_iovlen = 2;
+
 	read_iovs[0].iov_base = &incoming;
 	read_iovs[0].iov_len = sizeof(incoming);
 
@@ -1124,11 +1128,8 @@ int door_return( char* restrict data_ptr,
 	static const int ERROR = -1;
 	int fd;
 	struct msg_door_return outgoing;
-	struct iovec send_iov[2];
-	const struct msghdr send_hdr = {
-		.msg_iov = send_iov,
-		.msg_iovlen = 2
-	};
+	struct iovec send_iovs[2];
+	struct msghdr send_hdr;
 
 	if ( ( NULL == data_ptr && 0 != data_size ) ||
 	     ( NULL == desc_ptr && 0 != num_desc )
@@ -1146,11 +1147,17 @@ int door_return( char* restrict data_ptr,
 
 	msg_door_return_init( &outgoing, data_size );
 
-	send_iov[0].iov_base = &outgoing;
-	send_iov[0].iov_len = sizeof(outgoing);
+	bzero( send_iovs, 2*sizeof(struct iovec) );
+	bzero( &send_hdr, sizeof(send_hdr) );
 
-	send_iov[1].iov_base = data_ptr;
-	send_iov[1].iov_len = data_size;
+	send_hdr.msg_iov = send_iovs;
+	send_hdr.msg_iovlen = 2;
+
+	send_iovs[0].iov_base = &outgoing;
+	send_iovs[0].iov_len = sizeof(outgoing);
+
+	send_iovs[1].iov_base = data_ptr;
+	send_iovs[1].iov_len = data_size;
 
 	if ( 0 > sendmsg( fd, &send_hdr, MSG_EOR ) ) {
 		errno = EINVAL;
