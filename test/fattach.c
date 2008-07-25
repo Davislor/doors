@@ -1,3 +1,14 @@
+/***************************************************************************
+ * Portland Doors                                                          *
+ * fattach,c;  This test driver tests for STREAMS support, which the lib-  *
+ *             rary currently does not use because Linux doesn't have it,  *
+ *                                                                         *
+ *             Correct output: no error messages.                          *
+ *                                                                         *
+ * Released under the LGPL version 3 (see COPYING).  Copyright (C) 2008    *
+ * Loren B. Davis.  Based on work by Jason Lango.                          *
+ ***************************************************************************/
+
 #include "standards.h"
 
 #include <stdio.h>
