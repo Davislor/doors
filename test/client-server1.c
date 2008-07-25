@@ -1,3 +1,13 @@
+/***************************************************************************
+ * Portland Doors                                                          *
+ * client-server1.c:  Deprecated test driver for the door_info() function. *
+ *                    Please make test/client-server2 to compile the cur-  *
+ *                    rent test driver.                                    *
+ *                                                                         *
+ * Released under the LGPL version 3 (see COPYING).  Copyright (C) 2008    *
+ * Loren B. Davis.  Based on work by Jason Lango.                          *
+ ***************************************************************************/
+
 #include "standards.h"
 
 #include <stdio.h>

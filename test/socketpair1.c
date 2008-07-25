@@ -1,3 +1,13 @@
+/***************************************************************************
+ * Portland Doors                                                          *
+ * socketpair1.c:  Deprecated test driver for the door_info() function.    *
+ *                 Please make test/client-server2.c for the current dri-  *
+ *                 ver.                                                    *
+ *                                                                         *
+ * Released under the LGPL version 3 (see COPYING).  Copyright (C) 2008    *
+ * Loren B. Davis.  Based on work by Jason Lango.                          *
+ ***************************************************************************/
+
 #include "standards.h"
 
 #include <stdio.h>
@@ -9,17 +19,17 @@
 #include "door.h"
 #include "messages.h"
 
-void dummy_server_proc( void* cookie,
-                        char* restrict argp,
-                        size_t arg_size,
-                        door_desc_t* restrict dp,
-                        uint_t n_desc
-                      )
+static void dummy_server_proc( void* cookie,
+                                 char* restrict argp,
+                                 size_t arg_size,
+                                 door_desc_t* restrict dp,
+                                 uint_t n_desc
+                               )
 {
 	return;
 }
 
-void print_door_info( const struct door_info* info )
+static void print_door_info( const struct door_info* info )
 {
 	fflush(stdout);
 

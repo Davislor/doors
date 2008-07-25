@@ -11,7 +11,7 @@ LD = $(CROSS_COMPILE)ld
 AR = $(CROSS_COMPILE)ar
 RANLIB = $(CROSS_COMPILE)ranlib
 
-CFLAGS		+= -g -pipe -D_FILE_OFFSET_BITS=64 -std=c99 -O2 \
+CFLAGS		+= -g -pipe -D_FILE_OFFSET_BITS=64 -std=c99 \
 -combine -pthread
 
 WARNINGS	= -Wall -Wstrict-prototypes -Wsign-compare -Wshadow \
@@ -33,11 +33,12 @@ INSTALLPATH	= /usr/local/lib
 # what are the actual library files here?
 
 PROGRAMS = 	test/error1		\
+		test/localserver1	\
 		test/localserver2	\
 		test/get_unique_id	\
-		test/socketpair1	\
 		test/client-server2	\
-		test/door_call1
+		test/door_call1		\
+		test/sun2
 
 DOOR_OBJS =	door_server.o	\
 		door_client.o	\
@@ -88,6 +89,10 @@ test/get_unique_id.o libdoor.a
 test/sun1: test/sun1.o libdoor.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/sun1 \
 test/sun1.o libdoor.a
+
+test/sun2: test/sun2.o libdoor.a
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/sun2 \
+test/sun2.o libdoor.a
 
 test/error1: test/error1.o libdoor.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/error1 \

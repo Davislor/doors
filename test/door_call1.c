@@ -1,3 +1,25 @@
+/***************************************************************************
+ * Portland Doors                                                          *
+ * door_call1.c: Test driver for the door_call() and door_return() funct-  *
+ *               ions.                                                     *
+ *                                                                         *
+ *               This program creates a door, and passes in the stdout     *
+ *               stream as its cookie argument.  The caller passes in the  *
+ *               string "Hello, World!" as data.  The server echoes the    *
+ *               input string, character by character according to its     *
+ *               reported length, to the stream we gave it as its cookie.  *
+ *               It then returns the number of characters it output.  The  *
+ *               caller checks that the results are correct and prints an  *
+ *               error message if anything is perceptibly wrong.           *
+ *                                                                         *
+ *               Correct output is the following: "Hello, world!"  The     *
+ *               program should not hang or report any error messages.     *
+ *                                                                         *
+ * Released under the LGPL version 3 (see COPYING).  Copyright (C) 2008    *
+ * Loren B. Davis.  Based on work by Jason Lango.                          *
+ ***************************************************************************/
+
+
 #include "standards.h"
 
 #include <assert.h>
@@ -5,24 +27,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/stat.h>
 
 #include "door.h"
 #include "error.h"
 
-void echo( void* restrict,
-           char* restrict,
-           size_t,
-           door_desc_t* restrict,
-           uint_t
-         );
-
-void client_proc(void);
-void server_proc(void);
-
 static const char* const door_path = "/tmp/door";
 
-void echo( void* restrict stream,
+static void echo( void* restrict stream,
            char* restrict string,
            size_t len,
            door_desc_t* restrict unused1,
@@ -46,7 +59,7 @@ void echo( void* restrict stream,
 	exit(EXIT_FAILURE);
 }
 
-void server_proc(void)
+static void server_proc(void)
 {
 	int door;
 
@@ -66,13 +79,13 @@ void server_proc(void)
 	return;
 }
 
-void client_proc(void)
+static void client_proc(void)
 {
 	int door;
 	struct door_arg_t params;
 	size_t printed = 0;
 
-	memset( &params, 0, sizeof(params) );
+	bzero( &params, sizeof(params) );
 
 	params.desc_ptr = NULL;
 	params.desc_num = 0;
@@ -95,6 +108,9 @@ void client_proc(void)
 
 	if ( 0 != door_close(door) )
 		fatal_system_error( __FILE__, __LINE__, "door_close" );
+
+	if ( 0 != door_detach(door_path) )
+		fatal_system_error( __FILE__, __LINE__, "door_detach" );
 
 	return;
 }

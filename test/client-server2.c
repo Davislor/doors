@@ -1,3 +1,27 @@
+/***************************************************************************
+ * Portland Doors                                                          *
+ * client-server2.c: Test driver for door_info() and door_getparam().      *
+ *                   This test driver creates a door, and then spawns four *
+ *                   child processes.  Each one queries the door informat- *
+ *                   ion and parameters.                                   *
+ *                                                                         *
+ *                   Correct output is the following:                      *
+ *                                                                         *
+ *                   All five processes report the server process' PID as  *
+ *                   the door server.  All five report the same cookie,    *
+ *                   ID, and parameters.  All five report that the door    *
+ *                   does not accept descriptors.  The client processes    *
+ *                   all report the door's flags as 0x8, or                *
+ *                   DOOR_REFUSE_DESC only,  The server process reports    *
+ *                   the door's flags as 0x28, or DOOR_REFUSE_DESC |       *
+ *                   DOOR_LOCAL.  There are no error messages or failed    *
+ *                   assertions, and the program does not hang for more    *
+ *                   than a second or two.                                 *
+ *                                                                         *
+ * Released under the LGPL version 3 (see COPYING).  Copyright (C) 2008    *
+ * Loren B. Davis.  Based on work by Jason Lango.                          *
+ ***************************************************************************/
+
 
 #include "standards.h"
 
@@ -10,30 +34,20 @@
 
 #include "door.h"
 
-void dummy_server( void* restrict,
-                   char* restrict,
-                   size_t,
-                   door_desc_t* restrict,
-                   uint_t
-                 );
-
-int server_process(void);
-int client_process(void);
-
 const char* const door_path = "/tmp/door";
 static const int nclients = 4;
 
-void dummy_server( void* restrict cookie,
-                   char* restrict argp,
-                   size_t arg_size,
-                   door_desc_t* restrict dp,
-                   uint_t ndesc
-                 )
+static void dummy_server( void* restrict cookie,
+                            char* restrict argp,
+                            size_t arg_size,
+                            door_desc_t* restrict dp,
+                            uint_t ndesc
+                          )
 {
 	return;
 }
 
-int server_process(void)
+static int server_process(void)
 {
 	int door;
 	struct door_info info;
@@ -87,7 +101,7 @@ int server_process(void)
 	return EXIT_SUCCESS;
 }
 
-int client_process(void)
+static int client_process(void)
 {
 	int door;
 	struct door_info info;

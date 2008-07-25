@@ -1,3 +1,17 @@
+/***************************************************************************
+ * Portland Doors                                                          *
+ * get_unique_id.c: Test driver for the get_unique_id() utility function.  *
+ *                  This function spawns two threads, both of which gener- *
+ *                  ate eight unique, 64-bit IDs.                          *
+ *                                                                         *
+ *                  Correct output: 16 64-bit IDs, distinct from each      *
+ *                  other and from any other IDs you generate by running   *
+ *                  the program again without rebooting.                   *
+ *                                                                         *
+ * Released under the LGPL version 3 (see COPYING).  Copyright (C) 2008    *
+ * Loren B. Davis.  Based on work by Jason Lango.                          *
+ ***************************************************************************/
+
 #include "standards.h"
 
 #include <pthread.h>
@@ -69,7 +83,7 @@ static door_id_t get_unique_id(void)
   return id;
 }
 
-void* spawn_id ( void* unused )
+static void* spawn_id ( void* unused )
 /* Spawn a unique ID in dynamic, thread-local storage and print it to 
  * stdout.
  */

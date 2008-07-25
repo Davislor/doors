@@ -1,3 +1,19 @@
+/***************************************************************************
+ * Portland Doors                                                          *
+ * localserver1.c: Test driver for the door_info() function on local       *
+ *                 doors.                                                  *
+ *                                                                         *
+ *                 This program creates three distinct doors, calls        *
+ *                 door_info() on each one, and checks that the results    *
+ *                 are correct.                                            *
+ *                                                                         *
+ *                 Correct output: All three checks pass.  No error mess-  *
+ *                 ages.                                                   *
+ *                                                                         *
+ * Released under the LGPL version 3 (see COPYING).  Copyright (C) 2008    *
+ * Loren B. Davis.  Based on work by Jason Lango.                          *
+ ***************************************************************************/
+
 #include "standards.h"
 #include "door.h"
 
@@ -6,19 +22,19 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-void proc1 (void* cookie, char* argp, size_t arg_size, door_desc_t* dp, 
+static void proc1 (void* cookie, char* argp, size_t arg_size, door_desc_t* dp, 
 uint_t n_desc )
 {
 
 }
 
-void proc2 (void* cookie, char* argp, size_t arg_size, door_desc_t* dp,
+static void proc2 (void* cookie, char* argp, size_t arg_size, door_desc_t* dp,
 uint_t n_desc )
 {
 
 }
 
-void proc3 (void* cookie, char* argp, size_t arg_size, door_desc_t* dp,
+static void proc3 (void* cookie, char* argp, size_t arg_size, door_desc_t* dp,
 uint_t n_desc )
 {
 
@@ -33,15 +49,15 @@ int main(void)
 	errno = 0;
 	self = getpid();
 
-	doors[0] = door_create( proc1, (void*)proc1, DOOR_REFUSE_DESC );
+	doors[0] = door_create( proc1, &doors[0], DOOR_REFUSE_DESC );
 	if ( 0 > doors[0] )
 		perror("door_create (proc1)");
 
-	doors[1] = door_create( proc2, (void*)proc2, 0 );
+	doors[1] = door_create( proc2, &doors[1], 0 );
 	if ( 0 > doors[1] )
 		perror("door_create (proc1)");
 
-	doors[2] = door_create( proc3, (void*)proc3, 0 );
+	doors[2] = door_create( proc3, &doors[2], 0 );
 	if ( 0 > doors[2] )
 		perror("door_create (proc1)");
 
@@ -50,7 +66,7 @@ int main(void)
 
 	if ( (self == info.di_target) &&
 	     ((door_ptr_t)proc1 == info.di_proc) &&
-	     ((door_ptr_t)proc1 == info.di_data) &&
+	     ((door_ptr_t)(&doors[0]) == info.di_data) &&
 	     ( (DOOR_LOCAL | DOOR_REFUSE_DESC) == info.di_attributes )
 	   )
 		printf("Check 1 passed.\n");
@@ -65,7 +81,7 @@ int main(void)
 
 	if ( (self == info.di_target) &&
 	     ((door_ptr_t)proc2 == info.di_proc) &&
-	     ((door_ptr_t)proc2 == info.di_data) &&
+	     ((door_ptr_t)(&doors[1]) == info.di_data) &&
 	     ( DOOR_LOCAL == info.di_attributes )
 	   )
 		printf("Check 2 passed.\n");
@@ -80,7 +96,7 @@ int main(void)
 
 	if ( (self == info.di_target) &&
 	     ((door_ptr_t)proc3 == info.di_proc) &&
-	     ((door_ptr_t)proc3 == info.di_data) &&
+	     ((door_ptr_t)(&doors[2]) == info.di_data) &&
 	     ( DOOR_LOCAL == info.di_attributes )
 	   )
 		printf("Check 3 passed.\n");

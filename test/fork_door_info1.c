@@ -1,3 +1,12 @@
+/***************************************************************************
+ * Portland Doors                                                          *
+ * fork_door_info1.c: Deprecated test driver for the door_info() function. *
+ *                    The current unit test is test/client-server2.        * 
+ *                                                                         *
+ * Released under the LGPL version 3 (see COPYING).  Copyright (C) 2008    *
+ * Loren B. Davis.  Based on work by Jason Lango.                          *
+ ***************************************************************************/
+
 #include "standards.h"
 
 #include <fcntl.h>

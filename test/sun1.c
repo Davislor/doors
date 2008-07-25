@@ -1,11 +1,15 @@
 /***************************************************************************
- * Doors/Linux                                                             *
- * Simple test application based on demonstration code from the Solaris 10 *
- * door_create manpage.                                                    *
+ * Portland Doors                                                          *
+ * sun1.c:  Example code from the Solaris 10 manpages.                     *
+ *                                                                         *
+ *          This program exposes several differences between the portable  *
+ *          version of the API and the original version.  It will run      *
+ *          without an error on Solaris, but fail on Linux.  The equiva-   *
+ *          lent program for the new API is test/sun2.                     *
  ***************************************************************************/
 
 #include "standards.h"
-#include "door.h"
+#include <door.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,7 +19,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-void
+static void
 server(void *cookie, char *argp, size_t arg_size, door_desc_t *dp,
     uint_t n_desc)
 {
