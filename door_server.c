@@ -59,6 +59,9 @@ struct door_data {
 	door_id_t	id;		/* System-wide unique ID */
 	size_t		data_min;	/* Minimum length of input */
 	size_t		data_max;	/* Maximum length of input */
+	bool		attachments;	/* Is this thread attached? */
+	pthread_cond_t	can_listen;	/* Has this thread been bound? */
+	pthread_mutex_t	lock_data;	/* Hold to modify this structure. */
 };
 
 /* The door table is an array of pointers to door_data structures.  A
@@ -595,6 +598,38 @@ static void* door_listen( void* int_ptr )
 
 	assert( NULL != p );
 
+	if ( 0 != pthread_mutex_lock(&p->lock_data) )
+		fatal_system_error(__FILE__,__LINE__,"mutex lock");
+
+/* If DOOR_PRIVATE is implemented, we should ensure that only one server
+ * thread listens at a time.  Currently, it isn't.
+ */
+
+	while ( ! p->attachments ) {
+/* Wait for another thread to call listen() on the door.  The POSIX standard
+ * requires us to own the mutex lock when we call posix_cond_wait().  That
+ * function will atomically release the lock if it blocks, so door_attach() 
+ * won't deadlock.
+ */
+		if ( 0 != pthread_cond_wait( &p->can_listen,
+		                             &p->lock_data
+		                           )
+		   ) {
+			fatal_system_error( __FILE__
+			                    ,__LINE__,
+			                    "pthread_cond_wait"
+			                  );
+		} /* end if */
+	} /* end while */
+
+	if ( 0 != pthread_mutex_unlock(&p->lock_data) )
+		fatal_system_error(__FILE__,__LINE__,"mutex unlock");
+
+/* The p->attachments predicate is true, meaning that the door is ready to
+ * accept connections.  We've unlocked the door_table entry, so other threads
+ * may now modify it without deadlock.
+ */
+
 	while ( 0 <= ( endpoint = accept( d, NULL, 0 ) )
 	      ) {
 /* We have a new connection.  Spawn another thread to listen on it. */
@@ -624,7 +659,13 @@ static void* door_listen( void* int_ptr )
 
 /* Whoops! We can't listen any more.  Could it be that another thread
  * revoked our door?
+ *
+ * FIXME: The door could be re-attached later, unless revoked!  Instead of
+ * printing an error message, mark the door as unattached and wait on the
+ * condition variable again.
  */
+	fprintf( stderr, "(door %d) ", d );
+	perror("accept");
 	return NULL;
 }
 
@@ -713,6 +754,7 @@ int door_attach( int d, const char* path )
 
 	size_t path_len;
 	struct sockaddr_un address;
+	struct door_data* p;
 
 	if ( NULL == path ) {
 		errno = EINVAL;
@@ -753,6 +795,29 @@ int door_attach( int d, const char* path )
 
 	if ( 0 != listen( d, SOMAXCONN ) )
 		return ERROR;
+
+	lock_door_table();
+	p = door_table[d];
+	unlock_door_table();
+
+/* Now, we can tell the listening thread to listen.  The POSIX standard tells
+ * us to own this mutex when we call pthread_cond_signal() if we want 
+ * "predictable scheduling behavior."
+ */
+	if ( 0 != pthread_mutex_lock(&p->lock_data) )
+		fatal_system_error(__FILE__,__LINE__,"pthread_mutex_lock");
+
+/* If door_bind() is implemented, there may be more than one listener thread.
+ * The pthreads library requires them to detect if more than one has woken up,
+ * but still, wake up as few unwanted threads as possible.
+ */
+	p->attachments = true;	/* Should change this to a reference count. */
+
+	if ( 0 != pthread_cond_signal(&p->can_listen) )
+		fatal_system_error(__FILE__,__LINE__,"pthread_cond_signal");
+
+	if ( 0 != pthread_mutex_unlock(&p->lock_data) )
+		fatal_system_error(__FILE__,__LINE__,"pthread_mutex_unlock");
 
 	return SUCCESS;
 }
@@ -866,6 +931,9 @@ int door_create(
 	p->id = get_unique_id();
 	p->data_min = 0;
 	p->data_max = (size_t)default_buf - DOOR_CALL_RESERVED;
+	p->attachments = false;	/* Should change to a reference count. */
+	pthread_cond_init( &p->can_listen, NULL );
+	pthread_mutex_init ( &p->lock_data, NULL );
 
 	if ( 0 != spawn_door_server(did) ) {
 		close(did);
@@ -923,6 +991,8 @@ int door_detach ( const char* path )
 /* It is not an error to detach a door which you cannot open.  We 
  * could, however, attempt to open it and check socket options as well.
  */
+
+/* Code to decrement the attachment count goes here. */
 
 	return unlink(path);
 }
