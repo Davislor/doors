@@ -110,11 +110,6 @@ test/socketpair1: test/socketpair1.o libdoor.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/socketpair1 \
 test/socketpair1.o libdoor.a
 
-# Obsolete:
-test/client-server1: test/client-server1.o libdoor.a
-	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
--o test/client-server1 test/client-server1.o libdoor.a
-
 test/client-server2: test/client-server2.o libdoor.a
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
 -o test/client-server2 test/client-server2.o libdoor.a
@@ -122,6 +117,11 @@ test/client-server2: test/client-server2.o libdoor.a
 test/door_call1: test/door_call1.o libdoor.a
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
 -o test/door_call1 test/door_call1.o libdoor.a
+
+# Obsolete:
+test/client-server1: test/client-server1.o libdoor.a
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
+-o test/client-server1 test/client-server1.o libdoor.a
 
 clean:
 	$(E) "  CLEAN"
