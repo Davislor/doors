@@ -30,6 +30,7 @@
 #include <unistd.h>
 
 #include "door.h"
+#include "door_info.h"
 #include "error.h"
 #include "messages.h"
 
@@ -1092,8 +1093,6 @@ int door_info( int d, struct door_info* info )
 	static const int ERROR = -1;
 	static const int SUCCESS = 0;
 
-/* Hope (and assert) that this holds a function pointer: */
-	uintptr_t scratch;
 	const struct door_data* p;
 
 	if ( NULL == info ) {
@@ -1154,17 +1153,8 @@ int door_info( int d, struct door_info* info )
 
 	info->di_target = p->target;
 
-/* Function pointer casts are not explicitly permitted, so use memcpy().
- */
-	assert( sizeof(uintptr_t) == sizeof(server_proc_t) );
-	memcpy( &scratch,
-	        &(p->server_proc),
-	        sizeof(server_proc_t)
-	      );
-	info->di_proc = (door_ptr_t)scratch;
-
-/* On the other hand, pointers to void do convert to integral types. */
-	info->di_data = (door_ptr_t)(uintptr_t)(p->cookie);
+	info->di_proc = (door_ptr_t)fptr2u64(p->server_proc);
+	info->di_data = (door_ptr_t)optr2u64(p->cookie);
 
 	info->di_attributes = p->attr | DOOR_LOCAL;
 	info->di_uniquifier = p->id;

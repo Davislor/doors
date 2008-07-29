@@ -16,6 +16,7 @@
 
 #include "standards.h"
 #include "door.h"
+#include "door_info.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -65,8 +66,8 @@ int main(void)
 		perror("door_info (proc1)");
 
 	if ( (self == info.di_target) &&
-	     ((door_ptr_t)proc1 == info.di_proc) &&
-	     ((door_ptr_t)(&doors[0]) == info.di_data) &&
+	     ((door_ptr_t)fptr2u64(proc1) == info.di_proc) &&
+	     ((door_ptr_t)optr2u64(&doors[0]) == info.di_data) &&
 	     ( (DOOR_LOCAL | DOOR_REFUSE_DESC) == info.di_attributes )
 	   )
 		printf("Check 1 passed.\n");
@@ -80,8 +81,8 @@ int main(void)
 		perror("door_info (proc2)");
 
 	if ( (self == info.di_target) &&
-	     ((door_ptr_t)proc2 == info.di_proc) &&
-	     ((door_ptr_t)(&doors[1]) == info.di_data) &&
+	     ((door_ptr_t)fptr2u64(proc2) == info.di_proc) &&
+	     ((door_ptr_t)optr2u64(&doors[1]) == info.di_data) &&
 	     ( DOOR_LOCAL == info.di_attributes )
 	   )
 		printf("Check 2 passed.\n");
@@ -95,8 +96,8 @@ int main(void)
 		perror("door_info (proc3)");
 
 	if ( (self == info.di_target) &&
-	     ((door_ptr_t)proc3 == info.di_proc) &&
-	     ((door_ptr_t)(&doors[2]) == info.di_data) &&
+	     ((door_ptr_t)fptr2u64(proc3) == info.di_proc) &&
+	     ((door_ptr_t)optr2u64(&doors[2]) == info.di_data) &&
 	     ( DOOR_LOCAL == info.di_attributes )
 	   )
 		printf("Check 3 passed.\n");

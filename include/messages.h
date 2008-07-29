@@ -11,6 +11,7 @@
 
 #include "standards.h"
 #include "door.h"
+#include "door_info.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -30,8 +31,6 @@ enum msg_code {
 };
 
 #define REQ_DOOR_INFO		0
-
-typedef void (*server_proc_t) (void*, char*, size_t, door_desc_t*, uint_t);
 
 /* Message types are 32-bit unsigned integers.  Therefore, the only
  * standard type guaranteed to hold any message type, or the value -1,
@@ -124,9 +123,8 @@ msg_door_info_init( struct msg_door_info* p,
 	p->code = (uint32_t)code_door_info;
 	p->attr = (uint32_t)attr;
 	p->target = (uint64_t)target;
-	p->proc = 0;
-	memcpy( &p->proc, &proc, sizeof(proc) );
-	p->cookie = (uint64_t)(uintptr_t)cookie;
+	p->proc = fptr2u64(proc);
+	p->cookie = optr2u64(cookie);
 	p->id = (uint64_t)id;
 
 	return p;
