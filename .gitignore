@@ -11,6 +11,8 @@ test/get_unique_id
 test/localserver1
 test/localserver2
 test/socketpair1
+test/fattach
+test/sun2
 .libs
 .dotest
 

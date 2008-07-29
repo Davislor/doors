@@ -2,7 +2,7 @@ Portland Doors is Copyright (C) 2008 Loren B. Davis.  All rights
 reserved.  It is released under the GNU LGPL version 3 (see COPYING) and 
 provided with NO WARRANTY.
 
-Credits (as of 21 July 2008)
+Credits (as of 28 July 2008)
 
 Sun Microsystems designed and implemented the original Doors library.
 
@@ -22,3 +22,6 @@ for the build environment.
 
 Bart Massey <bart@cs.pdx.edu> contributed much advice, and help with 
 tools.
+
+The manual pages in the documentation/sun directory are copyright 2005 Sun Microsystems and released under the CDDL.
+
