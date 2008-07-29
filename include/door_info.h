@@ -17,7 +17,7 @@
 typedef void (*server_proc_t) (void*, char*, size_t, door_desc_t*, uint_t);
 
 union door_ptr_conv_t {
-	uint64_t	u64;
+	uintptr_t	ui;
 	void*		optr;
 	server_proc_t	fptr;
 };
@@ -25,21 +25,21 @@ union door_ptr_conv_t {
 static inline uint64_t optr2u64(void* p)
 {
 	union door_ptr_conv_t scratch = {
-		.u64 = 0
+		.ui = 0
 	};
 
 	scratch.optr = p;
-	return scratch.u64;
+	return (uint64_t)scratch.ui;
 }
 
 static inline uint64_t fptr2u64(server_proc_t p)
 {
 	union door_ptr_conv_t scratch = {
-		.u64 = 0
+		.ui = 0
 	};
 
 	scratch.fptr = p;
-	return scratch.u64;
+	return (uint64_t)scratch.ui;
 }
 
 #endif /* Include guard. */
