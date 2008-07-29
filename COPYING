@@ -5,8 +5,10 @@
 	published by the Free Software Foundation, either version 3 of the 
 	License, or (at your option) any later version.  (See lgpl-3.0.txt.)
 
-	Some of the documentation is released under the Common Development and 
-	Distribution License (CDDL), version 1.0.  (See cddllicense.txt.)
+	Some of the documentation is copyright © 2005 Sun Microsystems, and
+	released under the Common Development and Distribution License (CDDL),
+	version 1.0.  (See cddllicense.txt.)  All such files contain a
+	copyright notice in their introductions.
 
 	This program is distributed in the hope that it will be useful,
 	but WITHOUT ANY WARRANTY; without even the implied warranty of
