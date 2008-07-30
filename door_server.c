@@ -50,8 +50,6 @@ static const size_t open_default = 1024U;
  * the table's storage, and set door_table to NULL.
  */
 
-/* FIXME: door_revoke() currently breaks listening threads! */
-
 struct door_data {
 	pid_t		target;		/* Server PID */
 	server_proc_t	server_proc;	/* Points to server proc */
@@ -60,9 +58,17 @@ struct door_data {
 	door_id_t	id;		/* System-wide unique ID */
 	size_t		data_min;	/* Minimum length of input */
 	size_t		data_max;	/* Maximum length of input */
+/* Number of pointers to this structure; each listener thread holds a copy,
+ * so we should decrement this reference count and free it only when it hits.
+ * 0.  Signed in order to more easily detect underflow.  We don't bother to
+ * count the reference in the door_table, since door_revoke() erases that
+ * first.
+ */
+	int		pointers;
+	bool		revoked;	/* Has this door been revoked? */
 	bool		attachments;	/* Is this thread attached? */
 	pthread_cond_t	can_listen;	/* Has this thread been bound? */
-	pthread_mutex_t	lock_data;	/* Hold to modify this structure. */
+	pthread_mutex_t	lock_data;	/* Own to modify this structure. */
 };
 
 /* The door table is an array of pointers to door_data structures.  A
@@ -381,7 +387,33 @@ static inline void unlock_door_table(void)
 	return;
 }
 
-static void inline handle_door_call( int fd, const struct door_data* p )
+static inline void lock_door_data( struct door_data* p )
+/* Acquires a lock on a door_data structure, so that operations on it will be
+ * thread-safe and atomic.
+ */
+{
+	assert( NULL != p );
+
+	if ( 0 != pthread_mutex_lock( & p->lock_data ) )
+		fatal_system_error( __FILE__, __LINE__, "Lock door_data" );
+
+	return;
+}
+
+static inline void unlock_door_data( struct door_data* p )
+/* Releases a lock on a door_data structure, so that other operations on it
+ * may proceed.
+ */
+{
+	assert( NULL != p );
+
+	if ( 0 != pthread_mutex_unlock( & p->lock_data ) )
+		fatal_system_error( __FILE__, __LINE__, "Unock door_data" );
+
+	return;
+}
+
+static inline void handle_door_call( int fd, const struct door_data* p )
 /* Reads a msg_door_call message from the connected socket fd, calls
  * that thread's server procedure with the correct parameters, and if we
  * return, it's because the procedure never called door_return().
@@ -599,8 +631,7 @@ static void* door_listen( void* int_ptr )
 
 	assert( NULL != p );
 
-	if ( 0 != pthread_mutex_lock(&p->lock_data) )
-		fatal_system_error(__FILE__,__LINE__,"mutex lock");
+	lock_door_data(p);
 
 /* If DOOR_PRIVATE is implemented, we should ensure that only one server
  * thread listens at a time.  Currently, it isn't.
@@ -623,8 +654,7 @@ static void* door_listen( void* int_ptr )
 		} /* end if */
 	} /* end while */
 
-	if ( 0 != pthread_mutex_unlock(&p->lock_data) )
-		fatal_system_error(__FILE__,__LINE__,"mutex unlock");
+	unlock_door_data(p);
 
 /* The p->attachments predicate is true, meaning that the door is ready to
  * accept connections.  We've unlocked the door_table entry, so other threads
@@ -805,8 +835,7 @@ int door_attach( int d, const char* path )
  * us to own this mutex when we call pthread_cond_signal() if we want 
  * "predictable scheduling behavior."
  */
-	if ( 0 != pthread_mutex_lock(&p->lock_data) )
-		fatal_system_error(__FILE__,__LINE__,"pthread_mutex_lock");
+	lock_door_data(p);
 
 /* If door_bind() is implemented, there may be more than one listener thread.
  * The pthreads library requires them to detect if more than one has woken up,
@@ -817,8 +846,7 @@ int door_attach( int d, const char* path )
 	if ( 0 != pthread_cond_signal(&p->can_listen) )
 		fatal_system_error(__FILE__,__LINE__,"pthread_cond_signal");
 
-	if ( 0 != pthread_mutex_unlock(&p->lock_data) )
-		fatal_system_error(__FILE__,__LINE__,"pthread_mutex_unlock");
+	unlock_door_data(p);
 
 	return SUCCESS;
 }
@@ -932,7 +960,9 @@ int door_create(
 	p->id = get_unique_id();
 	p->data_min = 0;
 	p->data_max = (size_t)default_buf - DOOR_CALL_RESERVED;
-	p->attachments = false;	/* Should change to a reference count. */
+	p->attachments = false;
+	p->revoked = false;
+	p->pointers = 0;
 	pthread_cond_init( &p->can_listen, NULL );
 	pthread_mutex_init ( &p->lock_data, NULL );
 
