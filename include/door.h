@@ -64,7 +64,7 @@ typedef unsigned long long int	door_ptr_t;
 /* Placeholders */
 typedef struct door_desc_t	door_desc_t;
 typedef struct door_cred_t	door_cred_t;
-typedef struct ucred_t		ucred_t;
+typedef struct ucred_t	ucred_t;
 typedef struct door_tcred_t	door_tcred_t;
 
 /* door_info takes a struct door_info*, but door_server_create takes a 

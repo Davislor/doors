@@ -87,6 +87,18 @@ struct door_connect_t {
 	struct door_data*	data_ptr;
 };
 
+/* Data the thread calling the door server procedure will need.
+ */
+struct door_server_args_t {
+	int		fd;	
+	void*		data_ptr;
+	door_desc_t*	desc_ptr;
+	size_t		data_size;
+	uint_t		desc_num;
+	server_proc_t	server_proc;
+	void*		cookie;
+};
+
 /* A thread which attempts to create, resize, destroy or move door_table 
  * must hold the following lock in exclusive mode.  One which attempts 
  * to manipulate individual entries must hold it in shared mode.
@@ -113,7 +125,12 @@ static pthread_key_t caller_fd;
 /* Each thread handling a door_call() also needs to free its allocated
  * buffer.  We accomplish this by declaring it as a thread-specific key.
 */
-static pthread_key_t arg_buf;
+static pthread_key_t door_arg_buf;
+
+/* Finally, the thread calling the server procedure needs to free its server
+ * argument buffer.
+ */
+static pthread_key_t server_arg_buf;
 
 /* Internal functions with file scope: */
 
@@ -195,7 +212,10 @@ static void server_init(void)
 	if ( 0 != pthread_key_create( &caller_fd, NULL ) )
 		fatal_system_error(__FILE__, __LINE__, "pthread_key_create");
 
-	if ( 0 != pthread_key_create( &arg_buf, free ) )
+	if ( 0 != pthread_key_create( &door_arg_buf, free ) )
+		fatal_system_error(__FILE__, __LINE__, "pthread_key_create");
+
+	if ( 0 != pthread_key_create( &server_arg_buf, free ) )
 		fatal_system_error(__FILE__, __LINE__, "pthread_key_create");
 
 	return;
@@ -449,16 +469,16 @@ static inline void release_door_data( struct door_data* p )
 
 	lock_door_data(p);
 
-/* If the reference count is less than 1, we released the data more times than
+/* If the reference count is less than 0, we released the data more times than
  * we referenced it, a serious logic error.  The pointers member is signed
  * in order to detect this.
  */
-	assert( 0 < p->pointers );
-
-	--p->pointers;
+	assert( 0 <= p->pointers );
 
 	if ( 0 == p->pointers ) {
-/* According to the POSIX spec, attempting to destroy a pthread_cond_t that
+/* We hold the last copy of the data.  We can and should safely free it.
+ *
+ * According to the POSIX spec, attempting to destroy a pthread_cond_t that
  * other threads are waiting on causes undefined behavior.  Because there are
  * no other copies of p left, however, there must be no such threads.
  * Likewise, we must free the lock because destroying an owned lock causes
@@ -470,16 +490,45 @@ static inline void release_door_data( struct door_data* p )
 		pthread_mutex_destroy( & p->lock_data );
 		free(p);
 	}
-	else
+	else {
+		--p->pointers;
 		unlock_door_data(p);
+	}
 
 	return;
 }
 
+static inline void* spawn_server_proc( void* p )
+/* Invokes the given server procedure based on the arguments in args.
+ */
+{
+	const struct door_server_args_t* args = p;
+
+/* Store the socket fd where door_return() can retrieve it. */
+	if ( 0 != pthread_setspecific( caller_fd, &args->fd ) )
+		fatal_system_error(__FILE__,__LINE__,"pthread_setspecific");
+
+/* Free the data buffer when this thread exits (outside the critical path). */
+	if ( 0 != pthread_setspecific( door_arg_buf, args->data_ptr ) )
+		fatal_system_error(__FILE__,__LINE__,"pthread_setspecific");
+
+/* Also free the argument buffer when this thread exits. */
+	if ( 0 != pthread_setspecific( server_arg_buf, args ) )
+		fatal_system_error(__FILE__,__LINE__,"pthread_setspecific");
+
+	(args->server_proc)( args->cookie,
+	                     args->data_ptr,
+	                     args->data_size,
+	                     args->desc_ptr,
+	                     args->desc_num
+	                   );
+
+	return NULL;
+}
+
 static inline void handle_door_call( int fd, const struct door_data* p )
 /* Reads a msg_door_call message from the connected socket fd, calls
- * that thread's server procedure with the correct parameters, and if we
- * return, it's because the procedure never called door_return().
+ * that thread's server procedure with the correct parameters.
  */
 {
 	struct msg_door_call incoming;
@@ -487,6 +536,8 @@ static inline void handle_door_call( int fd, const struct door_data* p )
 	ssize_t arg_size;
 	struct iovec read_iovs[2];
 	struct msghdr read_hdr;
+	struct door_server_args_t* arg_ptr;
+	pthread_t thread_id;
 
 	if ( 0 > recv( fd, &incoming, sizeof(incoming), MSG_PEEK ) ) {
 		return;
@@ -510,8 +561,6 @@ static inline void handle_door_call( int fd, const struct door_data* p )
 		return;
 	}
 
-	pthread_setspecific( caller_fd, &fd );
-
 	if ( 0 != arg_size ) {
 		argp = malloc((size_t)arg_size);
 
@@ -519,8 +568,6 @@ static inline void handle_door_call( int fd, const struct door_data* p )
 			xmit_error( fd, ENOBUFS );
 			return;
 		}
-
-		pthread_setspecific( arg_buf, argp );
 	}
 /* We have stored the socket to send the results to where door_return()
  * can retrieve it.  We know that arg_size is an appropriate amount of
@@ -541,13 +588,34 @@ static inline void handle_door_call( int fd, const struct door_data* p )
 	read_iovs[1].iov_len = (size_t)arg_size;
 
 	if ( (ssize_t)sizeof(struct msg_door_call) + arg_size !=
-	     recvmsg( fd, &read_hdr, MSG_WAITALL )
+	     recvmsg( fd, &read_hdr, 0 )
 	   ) {
 		xmit_error( fd, EBADMSG );
 		return;
 	}
 
-	(p->server_proc)( p->cookie, argp, (size_t)arg_size, NULL, 0 );
+/* Handle the door call asynchronously, so as not to block the socket.  (Also,
+ * this allows door_return() to keep track of which call it's returning from
+ * using thread-specific data.
+ */
+	arg_ptr = malloc( sizeof(struct door_server_args_t) );
+	if ( NULL == arg_ptr ) {
+		xmit_error( fd, ENOBUFS );
+		return;
+	}
+
+	arg_ptr->fd = fd;
+	arg_ptr->data_ptr = argp;
+	arg_ptr->data_size = (size_t)arg_size;
+	arg_ptr->desc_ptr = NULL;
+	arg_ptr->desc_num = 0;
+	arg_ptr->server_proc = p->server_proc;
+	arg_ptr->cookie = p->cookie;
+
+	if ( 0 != pthread_create( &thread_id, NULL, spawn_server_proc, arg_ptr ) )
+		fatal_system_error(__FILE__,__LINE__,"pthread_create");
+
+	return;
 }
 
 static void inline handle_msg_request( int fd, const struct door_data* p )
@@ -622,8 +690,6 @@ static void* connection_listen( void* connection_ptr )
  * finished.
  *
  * It performs little or no argument-checking and always "returns" NULL.
- *
- * FIXME: Handle commands other than door_info!
  */
 {
 	const int fd = ((struct door_connect_t*)connection_ptr)->listen_fd;
@@ -661,6 +727,7 @@ static void* connection_listen( void* connection_ptr )
  * Support for unreferenced invocations goes here.
  */
 
+	release_door_data(p);
 	return NULL;
 }
 
@@ -694,71 +761,94 @@ static void* door_listen( void* int_ptr )
 	assert( NULL != p );
 
 	lock_door_data(p);
+	increment_door_data_pointers(p);
+	unlock_door_data(p);
 
 /* If DOOR_PRIVATE is implemented, we should ensure that only one server
  * thread listens at a time.  Currently, it isn't.
  */
 
-	while ( ! p->attachments ) {
+	while ( ! p->revoked ) {
+		while ( ! p->attachments ) {
 /* Wait for another thread to call listen() on the door.  The POSIX standard
  * requires us to own the mutex lock when we call posix_cond_wait().  That
  * function will atomically release the lock if it blocks, so door_attach() 
  * won't deadlock.
+ *
+ * The case where we will need to loop more than once here is extremely rare,
+ * whereas the case where we skip this loop entirely is common, so I bring the
+ * locking and unlocking inside the loop to optimize the latter.
  */
-		if ( 0 != pthread_cond_wait( &p->can_listen,
-		                             &p->lock_data
-		                           )
-		   ) {
-			fatal_system_error( __FILE__,
-			                    __LINE__,
-			                    "pthread_cond_wait"
-			                  );
-		} /* end if */
-	} /* end while */
+			lock_door_data(p);
 
-	unlock_door_data(p);
+			if ( 0 != pthread_cond_wait( &p->can_listen,
+			                             &p->lock_data
+			                           )
+			   ) {
+				fatal_system_error( __FILE__,
+				                    __LINE__,
+				                    "pthread_cond_wait"
+			                  );
+			} /* end if ( 0 != pthread_cond_wait(...) ) */
+			if ( p->revoked ) {
+/* A call to door_revoke() woke us.  Terminate the thread. */
+				unlock_door_data(p);
+				release_door_data(p);
+				return NULL;
+			} /* end if (p->revoked) */
+			else
+				unlock_door_data(p);
+		} /* end while ( ! p-> attachments ) */
 
 /* The p->attachments predicate is true, meaning that the door is ready to
  * accept connections.  We've unlocked the door_table entry, so other threads
  * may now modify it without deadlock.
  */
-
-	while ( 0 <= ( endpoint = accept( d, NULL, 0 ) )
-	      ) {
-/* We have a new connection.  Spawn another thread to listen on it. */
-/* Information the new thread will need, and free. */
-		struct door_connect_t* arg;
+		while ( 0 <= ( endpoint = accept( d, NULL, 0 ) )
+		       ) {
+/* We have a new connection.  Spawn another thread to listen on it.  The
+ * door_revoke() function closes the file descriptor, which should cause
+ * accept() to fail.
+ */
+/* Information the new thread will need, and free: */
+			struct door_connect_t* arg;
 /* We'll get back the thread ID, but not keep it. */
-		pthread_t thread_id;
+			pthread_t thread_id;
 
-		arg =
+			arg =
 (struct door_connect_t*)malloc(sizeof(struct door_connect_t));
-		if ( NULL == arg )
-			return NULL;
+			if ( NULL == arg )
+				return NULL;
 
-		arg->listen_fd = endpoint;
-		arg->data_ptr = p;
+			arg->listen_fd = endpoint;
+			arg->data_ptr = p;
 
-		if (
+			lock_door_data(p);
+			increment_door_data_pointers(p);
+			unlock_door_data(p);
+
+			if (
 0 != pthread_create( &thread_id, NULL, connection_listen, (void*)arg )
-		) {
+			) {
 /* No one's listening!  Close the connection.  Also, there's no one
  * else to free arg, so do that now.
  */
-			free(arg);
-			close(endpoint);
-		} /* end if */
-	} /* end while */
-
-/* Whoops! We can't listen any more.  Could it be that another thread
- * revoked our door?
- *
- * FIXME: The door could be re-attached later, unless revoked!  Instead of
- * printing an error message, mark the door as unattached and wait on the
- * condition variable again.
+				free(arg);
+				close(endpoint);
+				release_door_data(p);
+			} /* end if */
+		} /* end while ( 0 <= accept() ) */
+/* If accept() reports EINVAL, that means that our descriptor is no longer
+ * accepting connections.  If that isn't because it's been revoked, we should
+ * wait for it to be re-attached with door_attach(). 
  */
-	fprintf( stderr, "(door %d) ", d );
-	perror("accept");
+		if ( EINVAL == errno )
+			p->attachments = false;
+
+	} /* end while ( ! p->revoked ) */
+
+/* Our door has been revoked, or failed unrecoverably. */
+	release_door_data(p);
 	return NULL;
 }
 
@@ -1326,21 +1416,23 @@ int door_revoke( int d )
 /* See the SunOS 5.11 manual for a specification of how this function 
  * works.
  *
- * This implementation marks a door as revoked by marking its server 
- * process as 0.
+ * This implementation marks the given door as revoked, wakes up all threads
+ * listening to that door so that they can immediately detect this fact and
+ * terminate, and decrements the reference count on the data, so that the last
+ * thread to release its copy of the door data will free it properly.
+ *
+ * At present, established connections will not immediately abort when a door
+ * is revoked; a call in progress may even complete.
  *
  * Currently, this function makes no effort to distinguish between 
  * non-local doors and non-doors.  If door_table[d].info reports 0 as 
- * the server process, you get back EPERM.  Also, it makes no special 
- * effort to guarantee that door operations are atomic.
- *
- * FIXME: Never, ever, ever free the door_table entry while any other 
- * thread might hold a pointer to it!  The program will crash!  Keep a
- * reference count.
+ * the server process, you get back EPERM.
  */
 {
 	static const int ERROR = -1;
 	static const int SUCCESS = 0;
+
+	struct door_data* p;
 
 	lock_door_table();
 
@@ -1354,11 +1446,17 @@ int door_revoke( int d )
 		return ERROR;
 	}
 
-	free(door_table[d]);
+	p = door_table[d];
 	door_table[d] = NULL;
 	unlock_door_table();
-
 	close(d);
+
+	lock_door_data(p);
+	p->revoked = true;
+	pthread_cond_broadcast( & p->can_listen );
+	unlock_door_data(p);
+
+	release_door_data(p);
 
 	return SUCCESS;
 }

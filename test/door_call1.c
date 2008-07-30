@@ -47,7 +47,9 @@ static void echo( void* restrict stream,
 	for ( i = 0; i < len; ++i )
 		fputc( string[i], (FILE*)stream );
 
-	fputc( '\n', (FILE*)stream );
+	if ( 0 < len )
+		fputc( '\n', (FILE*)stream );
+
 	fflush((FILE*)stream);
 
 	if ( 0 != door_return( (char*)&len, sizeof(len), NULL, 0 ) )
@@ -105,6 +107,40 @@ static void client_proc(void)
 
 	if ( params.rbuf == &printed )
 		assert( sizeof("Hello, world!") == printed );
+
+	if ( 0 != door_close(door) )
+		fatal_system_error( __FILE__, __LINE__, "door_close" );
+
+	door = door_open(door_path);
+	if ( 0 > door )
+		fatal_system_error( __FILE__, __LINE__, "door_open" );
+
+	params.data_size = 0;
+
+	if ( 0 != door_call( door, &params ) )
+		fatal_system_error( __FILE__, __LINE__, "door_call" );
+
+	assert( 0 == *(const size_t*)params.data_ptr );
+
+	if ( params.rbuf == &printed )
+		assert( 0 == printed );
+
+	if ( 0 != door_close(door) )
+		fatal_system_error( __FILE__, __LINE__, "door_close" );
+
+	door = door_open(door_path);
+	if ( 0 > door )
+		fatal_system_error( __FILE__, __LINE__, "door_open" );
+
+	params.data_size = 0;
+
+	if ( 0 != door_call( door, &params ) )
+		fatal_system_error( __FILE__, __LINE__, "door_call" );
+
+	assert( 0 == *(const size_t*)params.data_ptr );
+
+	if ( params.rbuf == &printed )
+		assert( 0 == printed );
 
 	if ( 0 != door_close(door) )
 		fatal_system_error( __FILE__, __LINE__, "door_close" );

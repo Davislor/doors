@@ -41,7 +41,9 @@ static inline long long int message_type( int d )
 	static const long long ERROR = -1;
 	uint32_t type;
 
-	if ( 0 > recv( d, &type, sizeof(type), MSG_PEEK ) )
+	if ( (ssize_t)sizeof(type) >
+	      recv( d, &type, sizeof(type), MSG_PEEK )
+	   )
 		return ERROR;
 
 	return (long long int)type;
