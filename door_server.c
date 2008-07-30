@@ -413,6 +413,69 @@ static inline void unlock_door_data( struct door_data* p )
 	return;
 }
 
+static inline void increment_door_data_pointers( struct door_data* p )
+/* Increases the reference count of pointers to the structure by 1, preventing
+ * another thread from freeing the structure until we release it.
+ *
+ * This function does not, repeat, does not lock the data first, unlike
+ * release_door_data().  This is to reduce the number of lock/unlock calls and
+ * facilitate combining writes into a single atomic operation.  You must call
+ * lock_door_data() first and unlock_door_data() afterwards!
+ */
+{
+	assert( NULL != p );
+
+	++p->pointers;
+	return;
+}
+
+static inline void release_door_data( struct door_data* p )
+/* Decrements the reference count of pointers to the structure by 1.  If the
+ * new reference count is 0, this function frees all memory allocated to the
+ * structure and its members.
+ *
+ * This function does, repeat, does lock the data first, unlike
+ * increment_door_data_pointers().  This is so that the caller does not need
+ * to check whether p is still valid and unlock the data conditionally.  It
+ * means that the calling thread must not own the lock, or the program will
+ * deadlock!
+ *
+ * On return, either p will no longer be valid, or the calling thread will not
+ * own its lock.  In either case, the caller must not attempt to unlock the
+ * data.
+ */
+{
+	assert( NULL != p );
+
+	lock_door_data(p);
+
+/* If the reference count is less than 1, we released the data more times than
+ * we referenced it, a serious logic error.  The pointers member is signed
+ * in order to detect this.
+ */
+	assert( 0 < p->pointers );
+
+	--p->pointers;
+
+	if ( 0 == p->pointers ) {
+/* According to the POSIX spec, attempting to destroy a pthread_cond_t that
+ * other threads are waiting on causes undefined behavior.  Because there are
+ * no other copies of p left, however, there must be no such threads.
+ * Likewise, we must free the lock because destroying an owned lock causes
+ * undefined behavior.  Because there are no other copies of p left, there
+ * must not be any other threads waiting to grab the lock.
+ */
+		pthread_cond_destroy( & p->can_listen );
+		unlock_door_data(p);
+		pthread_mutex_destroy( & p->lock_data );
+		free(p);
+	}
+	else
+		unlock_door_data(p);
+
+	return;
+}
+
 static inline void handle_door_call( int fd, const struct door_data* p )
 /* Reads a msg_door_call message from the connected socket fd, calls
  * that thread's server procedure with the correct parameters, and if we
@@ -584,9 +647,8 @@ static void* connection_listen( void* connection_ptr )
 				break;
 			default: {
 				xmit_error( fd, ENOTSUP );
-/* We could check for the MSG_EOR flag in recvmsg() to recover from this
- * error.  We could at least linger.  At present, we just close the
- * socket.
+/* We could recover from this error. We could at least linger.  At present, we
+ * just close the socket.
  */
 				close(fd);
 			}
@@ -647,8 +709,8 @@ static void* door_listen( void* int_ptr )
 		                             &p->lock_data
 		                           )
 		   ) {
-			fatal_system_error( __FILE__
-			                    ,__LINE__,
+			fatal_system_error( __FILE__,
+			                    __LINE__,
 			                    "pthread_cond_wait"
 			                  );
 		} /* end if */
