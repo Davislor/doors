@@ -498,7 +498,7 @@ static inline void release_door_data( struct door_data* p )
 	return;
 }
 
-static inline void* spawn_server_proc( void* p )
+static void* spawn_server_proc( void* p )
 /* Invokes the given server procedure based on the arguments in args.
  */
 {
