@@ -526,7 +526,7 @@ static void* spawn_server_proc( void* p )
 	return NULL;
 }
 
-static inline void handle_door_call( int fd, const struct door_data* p )
+static inline void handle_door_call( int fd, struct door_data* p )
 /* Reads a msg_door_call message from the connected socket fd, calls
  * that thread's server procedure with the correct parameters.
  */
@@ -553,13 +553,17 @@ static inline void handle_door_call( int fd, const struct door_data* p )
 
 	arg_size = msg_door_call_get_arg_size(&incoming);
 
+	lock_door_data(p);
 	if ( 0 > arg_size ||
 	     p->data_max < (size_t)arg_size ||
 	     p->data_min > (size_t)arg_size
 	   ) {
+		unlock_door_data(p);
 		xmit_error( fd, ENOBUFS );
 		return;
 	}
+	else
+		unlock_door_data(p);
 
 	if ( 0 != arg_size ) {
 		argp = malloc((size_t)arg_size);
@@ -609,6 +613,10 @@ static inline void handle_door_call( int fd, const struct door_data* p )
 	arg_ptr->data_size = (size_t)arg_size;
 	arg_ptr->desc_ptr = NULL;
 	arg_ptr->desc_num = 0;
+/* No other function alters these data members during the door's lifetime.
+ * Therefore, we do not need to lock the data to prevent another process from
+ * writing to them while we are reading.
+ */
 	arg_ptr->server_proc = p->server_proc;
 	arg_ptr->cookie = p->cookie;
 
@@ -618,7 +626,7 @@ static inline void handle_door_call( int fd, const struct door_data* p )
 	return;
 }
 
-static void inline handle_msg_request( int fd, const struct door_data* p )
+static void inline handle_msg_request( int fd, struct door_data* p )
 /* Reads a request message from the connected socket fd, generates a message
  * based on the information to which p points, and transmits that message
  * back.
@@ -643,6 +651,7 @@ static void inline handle_msg_request( int fd, const struct door_data* p )
 		case 0: { /* door_info */
 			struct msg_door_info outgoing;
 
+			lock_door_data(p);	/* Necessary? */
 			msg_door_info_init( &outgoing,
 			                    p->target,
 			                    p->server_proc,
@@ -650,6 +659,7 @@ static void inline handle_msg_request( int fd, const struct door_data* p )
 			                    p->attr,
 			                    p->id
 			                  );
+			unlock_door_data(p);
 
 			send( fd, &outgoing, sizeof(outgoing), MSG_EOR );
 			break;
@@ -657,14 +667,18 @@ static void inline handle_msg_request( int fd, const struct door_data* p )
 		case 1: { /* data_max */
 			struct msg_door_getparam outgoing;
 
+			lock_door_data(p);
 			msg_door_getparam_init( &outgoing, 1, p->data_max );
+			unlock_door_data(p);
 			send( fd, &outgoing, sizeof(outgoing), MSG_EOR );
 			break;
 		}
 		case 2: { /* data_min */
 			struct msg_door_getparam outgoing;
 
+			lock_door_data(p);
 			msg_door_getparam_init( &outgoing, 2, p->data_min );
+			unlock_door_data(p);
 			send( fd, &outgoing, sizeof(outgoing), MSG_EOR );
 			break;
 		}
@@ -1190,7 +1204,7 @@ int door_getparam (int d, int param, size_t* out)
 	static const int ERROR = -1;
 	static const int SUCCESS = 0;
 
-	const struct door_data* p;
+	struct door_data* p;
 
 	if ( param < DOOR_PARAM_DATA_MAX ||
 	     param > DOOR_PARAM_DESC_MAX 
@@ -1251,11 +1265,15 @@ int door_getparam (int d, int param, size_t* out)
 
 	switch (param) {
 		case DOOR_PARAM_DATA_MAX:
+			lock_door_data(p);
 			*out = p->data_max;
+			unlock_door_data(p);
 			break;
 
 		case DOOR_PARAM_DATA_MIN:
+			lock_door_data(p);
 			*out = p->data_min;
+			unlock_door_data(p);
 			break;
 
 		case DOOR_PARAM_DESC_MAX:
@@ -1275,7 +1293,7 @@ int door_info( int d, struct door_info* info )
 	static const int ERROR = -1;
 	static const int SUCCESS = 0;
 
-	const struct door_data* p;
+	struct door_data* p;
 
 	if ( NULL == info ) {
 		errno = EINVAL;
@@ -1329,17 +1347,18 @@ int door_info( int d, struct door_info* info )
 		}
 	}
 
+/* A local door. */
 	lock_door_table();
 	p = door_table[d];
 	unlock_door_table();
 
+	lock_door_data(p);	/* Necessary? */
 	info->di_target = p->target;
-
 	info->di_proc = (door_ptr_t)fptr2u64(p->server_proc);
 	info->di_data = (door_ptr_t)optr2u64(p->cookie);
-
 	info->di_attributes = p->attr | DOOR_LOCAL;
 	info->di_uniquifier = p->id;
+	unlock_door_data(p);
 
 	return SUCCESS;
 }
@@ -1477,18 +1496,20 @@ int door_setparam ( int d, int param, size_t val )
 	int scratch;	/* Used by setsockopt() */
 	struct door_data* p;
 
-	lock_door_table();
-	p = door_table[d];
-	unlock_door_table();
-
 	if ( ( NULL == door_table ) ||
 	     ( 0 > d ) ||
 	     ( (size_t)d >= open_max ) ||
-	     ( NULL == p )
+	     ( NULL == door_table[d] )
 	   ) {
+/* Not a local door. */
 		errno = EBADF;
 		return ERROR;
 	}
+
+/* A local door. */
+	lock_door_table();
+	p = door_table[d];
+	unlock_door_table();
 
 	switch (param) {
 /* To change both DOOR_PARAM_DATA_MIN and DOOR_PARAM_DATA_MAX, you must 
@@ -1513,7 +1534,9 @@ int door_setparam ( int d, int param, size_t val )
 				return ERROR;
 			}
 
+			lock_door_data(p);
 			p->data_max = val;
+			unlock_door_data(p);
 			break;
 
 		case DOOR_PARAM_DATA_MIN:
@@ -1521,7 +1544,9 @@ int door_setparam ( int d, int param, size_t val )
 				errno = EINVAL;
 				return ERROR;
 			}
+			lock_door_data(p);
 			p->data_min = val;
+			unlock_door_data(p);
 			break;
 
 		case DOOR_PARAM_DESC_MAX:
