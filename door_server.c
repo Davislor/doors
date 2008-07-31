@@ -382,7 +382,7 @@ realloc( door_table, new_max * sizeof(struct door_data*) );
 	return door_table;
 }
 
-static inline void* start_server_proc( void* p )
+static void* start_server_proc( void* p )
 /* Invokes the given server procedure based on the arguments in args.
  */
 {
@@ -666,7 +666,7 @@ static inline void handle_door_call( int fd, struct door_data* p )
 	return;
 }
 
-static void inline handle_msg_request( int fd, struct door_data* p )
+static inline void handle_msg_request( int fd, struct door_data* p )
 /* Reads a request message from the connected socket fd, generates a message
  * based on the information to which p points, and transmits that message
  * back.
