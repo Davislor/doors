@@ -116,7 +116,7 @@ struct msg_door_info {
 static inline struct msg_door_info*
 msg_door_info_init( struct msg_door_info* p,
                     pid_t target,
-                    server_proc_t proc,
+                    door_server_proc_t proc,
                     void* cookie,
                     door_attr_t attr,
                     door_id_t id

@@ -23,20 +23,32 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-static void proc1 (void* cookie, char* argp, size_t arg_size, door_desc_t* dp, 
-uint_t n_desc )
+static void proc1( void* restrict cookie,
+                   void* restrict argp,
+                   size_t arg_size,
+                   const door_desc_t* restrict dp,
+                   uint_t n_desc
+                 )
 {
 
 }
 
-static void proc2 (void* cookie, char* argp, size_t arg_size, door_desc_t* dp,
-uint_t n_desc )
+static void proc2( void* restrict cookie,
+                   void* restrict argp,
+                   size_t arg_size,
+                   const door_desc_t* restrict dp,
+                   uint_t n_desc
+                 )
 {
 
 }
 
-static void proc3 (void* cookie, char* argp, size_t arg_size, door_desc_t* dp,
-uint_t n_desc )
+static void proc3( void* restrict cookie,
+                   void* restrict argp,
+                   size_t arg_size,
+                   const door_desc_t* restrict dp,
+                   uint_t n_desc
+                 )
 {
 
 }

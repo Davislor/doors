@@ -52,7 +52,7 @@ static const size_t open_default = 1024U;
 
 struct door_data {
 	pid_t		target;		/* Server PID */
-	server_proc_t	server_proc;	/* Points to server proc */
+	door_server_proc_t	server_proc;	/* Points to server proc */
 	void*		cookie;		/* Passed to the above */
 	door_attr_t	attr;		/* Attributes */
 	door_id_t	id;		/* System-wide unique ID */
@@ -95,7 +95,7 @@ struct door_server_args_t {
 	door_desc_t*	desc_ptr;
 	size_t		data_size;
 	uint_t		desc_num;
-	server_proc_t	server_proc;
+	door_server_proc_t	server_proc;
 	void*		cookie;
 };
 
@@ -131,6 +131,9 @@ static pthread_key_t door_arg_buf;
  * argument buffer.
  */
 static pthread_key_t server_arg_buf;
+
+/* It doesn't matter what this refers to, only that it's unique: */
+char* const restrict DOOR_UNREF_DATA = { 0 };
 
 /* Internal functions with file scope: */
 
@@ -379,6 +382,71 @@ realloc( door_table, new_max * sizeof(struct door_data*) );
 	return door_table;
 }
 
+static inline void* start_server_proc( void* p )
+/* Invokes the given server procedure based on the arguments in args.
+ */
+{
+	const struct door_server_args_t* args = p;
+
+/* Store the socket fd where door_return() can retrieve it. */
+	if ( 0 != pthread_setspecific( caller_fd, &args->fd ) )
+		fatal_system_error(__FILE__,__LINE__,"pthread_setspecific");
+
+/* Free the data buffer when this thread exits (outside the critical path). */
+	if ( 0 != pthread_setspecific( door_arg_buf, args->data_ptr ) )
+		fatal_system_error(__FILE__,__LINE__,"pthread_setspecific");
+
+/* Also free the argument buffer when this thread exits. */
+	if ( 0 != pthread_setspecific( server_arg_buf, args ) )
+		fatal_system_error(__FILE__,__LINE__,"pthread_setspecific");
+
+	(args->server_proc)( args->cookie,
+	                     args->data_ptr,
+	                     args->data_size,
+	                     args->desc_ptr,
+	                     args->desc_num
+	                   );
+
+	return NULL;
+}
+
+static inline void invoke_unreferenced( struct door_data* p )
+/* This function spawns a new thread to deliver an unreferenced invocation to
+ * the provided door's sever procedure.
+ */
+{
+	struct door_server_args_t* unref_args;
+	pthread_t thread_id;
+
+	unref_args = malloc(sizeof(struct door_server_args_t));
+/* If we run out of memory here, then what?  Could report the error up the
+ * call stack, but for debugging purposes, better to crash here.
+ */
+	if ( NULL == unref_args ) {
+		errno = ENOMEM;
+		fatal_system_error( __FILE__,
+		                    __LINE__,
+		                    "Delivering unreferenced invocation"
+		                  );
+	}
+
+	unref_args->fd = -1;	
+	unref_args->data_ptr = (void*)DOOR_UNREF_DATA;
+/* The door_call man page states that this pointer is 0, not NULL: */
+	unref_args->desc_ptr = NULL;
+	unref_args->data_size = 0;
+	unref_args->desc_num = 0;
+	unref_args->server_proc = p->server_proc;
+	unref_args->cookie = p->cookie;
+
+	if ( 0 !=
+	     pthread_create( &thread_id, NULL, start_server_proc, &unref_args )
+	   )
+		fatal_system_error( __FILE__, __LINE__, "pthread_create" );
+
+	return;
+}
+
 static inline void lock_door_table(void)
 /* Claims a non-exclusive lock on door_table.  Use this before 
  * manipulating its entries, to prevent another thread from moving it in 
@@ -498,34 +566,6 @@ static inline void release_door_data( struct door_data* p )
 	return;
 }
 
-static inline void* spawn_server_proc( void* p )
-/* Invokes the given server procedure based on the arguments in args.
- */
-{
-	const struct door_server_args_t* args = p;
-
-/* Store the socket fd where door_return() can retrieve it. */
-	if ( 0 != pthread_setspecific( caller_fd, &args->fd ) )
-		fatal_system_error(__FILE__,__LINE__,"pthread_setspecific");
-
-/* Free the data buffer when this thread exits (outside the critical path). */
-	if ( 0 != pthread_setspecific( door_arg_buf, args->data_ptr ) )
-		fatal_system_error(__FILE__,__LINE__,"pthread_setspecific");
-
-/* Also free the argument buffer when this thread exits. */
-	if ( 0 != pthread_setspecific( server_arg_buf, args ) )
-		fatal_system_error(__FILE__,__LINE__,"pthread_setspecific");
-
-	(args->server_proc)( args->cookie,
-	                     args->data_ptr,
-	                     args->data_size,
-	                     args->desc_ptr,
-	                     args->desc_num
-	                   );
-
-	return NULL;
-}
-
 static inline void handle_door_call( int fd, const struct door_data* p )
 /* Reads a msg_door_call message from the connected socket fd, calls
  * that thread's server procedure with the correct parameters.
@@ -612,7 +652,7 @@ static inline void handle_door_call( int fd, const struct door_data* p )
 	arg_ptr->server_proc = p->server_proc;
 	arg_ptr->cookie = p->cookie;
 
-	if ( 0 != pthread_create( &thread_id, NULL, spawn_server_proc, arg_ptr ) )
+	if ( 0 != pthread_create( &thread_id, NULL, start_server_proc, arg_ptr ) )
 		fatal_system_error(__FILE__,__LINE__,"pthread_create");
 
 	return;
@@ -758,7 +798,10 @@ static void* door_listen( void* int_ptr )
 	p = door_table[d];
 	unlock_door_table();	
 
-	assert( NULL != p );
+	if ( NULL == p ) {
+/* We lost a race with door_revoke(), and the door is no longer valid. */
+		return NULL;
+	}
 
 	lock_door_data(p);
 	increment_door_data_pointers(p);
@@ -1003,16 +1046,10 @@ int door_attach( int d, const char* path )
 	return SUCCESS;
 }
 
-int door_create(
-	void (*server_procedure) ( void* cookie,
-	                           char* restrict argp,
-	                           size_t arg_size,
-	                           door_desc_t* restrict dp,
-	                           uint_t n_desc
-	                         ),
-	                         void* cookie,
-	                         uint_t attributes
-              )
+int door_create( door_server_proc_t server_procedure,
+                 void* cookie,
+                 uint_t attributes
+               )
 /* See the SunOS 5.11 manual for a specification of how this function 
  * behaves.
  *
@@ -1122,6 +1159,8 @@ int door_create(
 		close(did);
 		return ERROR;
 	}
+
+/* Perhaps sync with the listener thread here, to prevent races? */
 
 	return did;
 }
@@ -1447,11 +1486,12 @@ int door_revoke( int d )
 	}
 
 	p = door_table[d];
+/* We were getting into a race with door_listen(). */
+	lock_door_data(p);
 	door_table[d] = NULL;
 	unlock_door_table();
 	close(d);
 
-	lock_door_data(p);
 	p->revoked = true;
 	pthread_cond_broadcast( & p->can_listen );
 	unlock_door_data(p);

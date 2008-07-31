@@ -12,7 +12,7 @@ AR = $(CROSS_COMPILE)ar
 RANLIB = $(CROSS_COMPILE)ranlib
 
 CFLAGS		+= -g -pipe -D_FILE_OFFSET_BITS=64 -std=c99 \
--combine -pthread
+-D__STDC_VERSION=199901L -combine -pthread
 
 WARNINGS	= -Wall -Wstrict-prototypes -Wsign-compare -Wshadow \
 		  -Wchar-subscripts -Wmissing-declarations -Wnested-externs \

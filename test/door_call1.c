@@ -35,22 +35,22 @@
 
 static const char* const door_path = "/tmp/door";
 
-static void echo( void* restrict stream,
-           char* restrict string,
-           size_t len,
-           door_desc_t* restrict unused1,
-           uint_t unused2
-         )
+static void echo( FILE* restrict stream,
+                  const char* restrict string,
+                  size_t len,
+                  const door_desc_t* restrict unused1,
+                  uint_t unused2
+                )
 {
 	size_t i;
 
 	for ( i = 0; i < len; ++i )
-		fputc( string[i], (FILE*)stream );
+		fputc( string[i], stream );
 
 	if ( 0 < len )
-		fputc( '\n', (FILE*)stream );
+		fputc( '\n', stream );
 
-	fflush((FILE*)stream);
+	fflush(stream);
 
 	if ( 0 != door_return( (char*)&len, sizeof(len), NULL, 0 ) )
 		fatal_system_error(__FILE__,__LINE__,"door_return");
@@ -67,7 +67,10 @@ static void server_proc(void)
 
 	door_detach(door_path);
 
-	door = door_create( echo, (void*)stdout, DOOR_REFUSE_DESC );
+	door = door_create( (door_server_proc_t)echo,
+	                    (void*)stdout,
+	                    DOOR_REFUSE_DESC
+	                  );
 
 	if ( 0 > door )
 		fatal_system_error( __FILE__, __LINE__, "door_create" );

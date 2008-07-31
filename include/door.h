@@ -13,9 +13,9 @@
  * with Doors on Solaris.  The most important difference is that
  * door_attach() replaces fattach() and requires that you NOT create
  * another file with the same pathname first.  Likewise, door_detach()
- * replaces fdetach() and removes the door from the filesystem.  All
- * doors servers will probably require slight modification, but doors
- * clients should not.
+ * replaces fdetach() and removes the door from the filesystem.  There is a
+ * similar pair of replacements for open() and close(), door_open() and
+ * door_close().
  *
  * This header file reserves all identifiers beginning with door_, 
  * DOOR_, _door_, and _DOOR_ for future use.
@@ -24,12 +24,8 @@
 #ifndef _DOOR_H
 #define _DOOR_H
 
-#undef	RESTRICT
-
-#if (__STDC_VERSION >= 199901L)
-#define RESTRICT restrict
-#else
-#define RESTRICT
+#if !defined(__STDC_VERSION) || (__STDC_VERSION < 199901L)
+#define restrict /**/
 #endif
 
 /* Size_t and pid_t are in <sys/types.h>. */
@@ -92,13 +88,14 @@ typedef struct door_arg_t {
 } door_arg_t;
 
 /* Status flags: */
-#define DOOR_UNREF		0x001
-#define DOOR_UNREF_MULTI	0x002
-#define DOOR_PRIVATE		0x004
-#define DOOR_REFUSE_DESC	0x008
-#define DOOR_NO_CANCEL		0x010
-#define DOOR_LOCAL		0x020
-#define DOOR_REVOKED		0x040
+#define DOOR_UNREF		0x001U
+#define DOOR_UNREF_MULTI	0x002U
+#define DOOR_PRIVATE		0x004U
+#define DOOR_REFUSE_DESC	0x008U
+#define DOOR_NO_CANCEL		0x010U
+#define DOOR_LOCAL		0x020U
+#define DOOR_REVOKED		0x040U
+#define DOOR_IS_UNREF		0x080U
 
 /* Parameters for door_setparam() and door_getparam(): */
 /* 0 is the code for door_info in a request. */
@@ -106,14 +103,28 @@ typedef struct door_arg_t {
 #define DOOR_PARAM_DATA_MIN	2
 #define DOOR_PARAM_DESC_MAX	3
 
+/* This argument to a door server indicates that it's been unreferenced. */
+extern char* const restrict	DOOR_UNREF_DATA;
+
 /* Currently unimplemented. */
 extern int door_bind(int did);
 
 /* Partially implemented. */
 extern int door_call( int d, door_arg_t* params );
 
-extern int door_create( void (* server_procedure)
-(void* cookie, char* argp, size_t arg_size, door_desc_t* dp, uint_t n_desc),
+/* This type is subtly different from the original implementation: the const
+ * and restrict qualifiers are new, and the argument buffer is now a void*
+ * rather than char*.  Legacy code should still run, but if you want to
+ * suppress compiler warnings, just cast to (door_server_proc_t).
+ */
+typedef void (*door_server_proc_t)( void* restrict,
+                                    void* restrict,
+                                    size_t,
+                                    const door_desc_t* restrict,
+                                    uint_t
+                                  );
+
+extern int door_create( door_server_proc_t server_procedure,
                         void* cookie,
                         uint_t attributes
                       );
@@ -129,9 +140,9 @@ extern int door_info(int d, struct door_info* info);
 extern int door_tcred( door_tcred_t* info );
 
 /* Currently unimplemented. */
-extern int door_return( RESTRICT char* data_ptr,
+extern int door_return( char* restrict data_ptr,
                         size_t data_size,
-                        RESTRICT door_desc_t* desc_ptr,
+                        door_desc_t* restrict desc_ptr,
                         uint_t num_desc
                       );
 
@@ -202,6 +213,6 @@ extern int door_close( int d );
 } /* extern "C" */
 #endif
 
-#undef RESTRICT
+#undef restrict
 
 #endif /* defined(_DOOR_H) */
