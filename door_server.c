@@ -410,37 +410,43 @@ static void* start_server_proc( void* p )
 	return NULL;
 }
 
+static void* start_unreferenced_invocation_thread( void* p )
+/* Calls the door whose information is stored in the door_data structure p
+ * points to with special unreferenced invocation arguments.
+ */
+{
+	static const int invalid_fd = -1;
+
+	const door_server_proc_t server_proc =
+((struct door_data*)p)->server_proc;
+	void* const cookie = ((struct door_data*)p)->cookie;
+
+/* We should set the file descriptor key to an invalid value, just in case the
+ * server procedure calls door_return() by mistake.  This key does not attempt
+ * to free its target, so we should be safe.
+ */
+	if ( 0 != pthread_setspecific( caller_fd, &invalid_fd ) )
+		fatal_system_error(__FILE__,__LINE__,"pthread_setspecific");
+
+/* The Sun man page says that the dp parameter is 0, not NULL. */
+	server_proc( cookie, DOOR_UNREF_DATA, 0, NULL, 0 );
+
+	return NULL;
+}
+
 static inline void invoke_unreferenced( struct door_data* p )
 /* This function spawns a new thread to deliver an unreferenced invocation to
  * the provided door's sever procedure.
  */
 {
-	struct door_server_args_t* unref_args;
 	pthread_t thread_id;
 
-	unref_args = malloc(sizeof(struct door_server_args_t));
-/* If we run out of memory here, then what?  Could report the error up the
- * call stack, but for debugging purposes, better to crash here.
- */
-	if ( NULL == unref_args ) {
-		errno = ENOMEM;
-		fatal_system_error( __FILE__,
-		                    __LINE__,
-		                    "Delivering unreferenced invocation"
-		                  );
-	}
-
-	unref_args->fd = -1;	
-	unref_args->data_ptr = (void*)DOOR_UNREF_DATA;
-/* The door_call man page states that this pointer is 0, not NULL: */
-	unref_args->desc_ptr = NULL;
-	unref_args->data_size = 0;
-	unref_args->desc_num = 0;
-	unref_args->server_proc = p->server_proc;
-	unref_args->cookie = p->cookie;
-
 	if ( 0 !=
-	     pthread_create( &thread_id, NULL, start_server_proc, &unref_args )
+	     pthread_create( &thread_id,
+	                     NULL,
+	                     start_unreferenced_invocation_thread,
+	                     p
+	                   )
 	   )
 		fatal_system_error( __FILE__, __LINE__, "pthread_create" );
 
@@ -557,6 +563,15 @@ static inline void release_door_data( struct door_data* p )
 		unlock_door_data(p);
 		pthread_mutex_destroy( & p->lock_data );
 		free(p);
+	}
+	else if ( ( ! p->revoked ) &&
+	          ( 2 == p->pointers ) &&
+	          ( DOOR_UNREF_MULTI & p->attr )
+	        ) {
+/* We should send an unreferenced invocation. */
+		--p->pointers;
+		unlock_door_data(p);
+		invoke_unreferenced(p);
 	}
 	else {
 		--p->pointers;
@@ -1077,7 +1092,8 @@ int door_create( door_server_proc_t server_procedure,
  */
 {
 	static const int ERROR = -1;
-	static const uint_t UNRECOGNIZED = ~(uint_t)(DOOR_REFUSE_DESC);
+	static const uint_t UNRECOGNIZED =
+~( DOOR_REFUSE_DESC | DOOR_UNREF_MULTI );
 
 	int did;		/* The descriptor of the new door */
 	int default_buf;	/* Used by getsockopt() */

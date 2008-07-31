@@ -34,6 +34,7 @@
 #include "error.h"
 
 static const char* const door_path = "/tmp/door";
+static const char* const message = "Hello, world!";
 
 static void echo( FILE* restrict stream,
                   const char* restrict string,
@@ -101,15 +102,15 @@ static void client_proc(void)
 	if ( 0 > door )
 		fatal_system_error( __FILE__, __LINE__, "door_open" );
 
-	params.data_ptr = "Hello, world!";
-	params.data_size = sizeof("Hello, world!");
+	params.data_ptr = message;
+	params.data_size = strlen(message);
 	if ( 0 != door_call( door, &params ) )
 		fatal_system_error( __FILE__, __LINE__, "door_call" );
 
-	assert( sizeof("Hello, world!") == *(const size_t*)params.data_ptr );
+	assert( strlen(message) == *(const size_t*)params.data_ptr );
 
 	if ( params.rbuf == &printed )
-		assert( sizeof("Hello, world!") == printed );
+		assert( strlen(message) == printed );
 
 	if ( 0 != door_close(door) )
 		fatal_system_error( __FILE__, __LINE__, "door_close" );
