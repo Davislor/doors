@@ -24,7 +24,8 @@
 #ifndef _DOOR_H
 #define _DOOR_H
 
-#if !defined(__STDC_VERSION) || (__STDC_VERSION < 199901L)
+/* GCC 4 supports the restrict keyword, but does not define __STDC_VERSION. */
+#if ( !defined(__STDC_VERSION) || (__STDC_VERSION < 199901L) ) && !defined(__GNUC__)
 #define restrict /**/
 #endif
 
