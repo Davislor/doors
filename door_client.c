@@ -150,7 +150,7 @@ int door_call( int door, door_arg_t* params )
 			send_iovs[0].iov_base = &outgoing;
 			send_iovs[0].iov_len = sizeof(outgoing);
 
-			send_iovs[1].iov_base = params->data_ptr;
+			send_iovs[1].iov_base = (void*)params->data_ptr;
 			send_iovs[1].iov_len = params->data_size;
 
 			msg_door_call_init( &outgoing,

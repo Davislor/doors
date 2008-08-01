@@ -79,7 +79,7 @@ typedef struct door_info {
  * data_ptr and rbuf members are pointers to void here.
  */
 typedef struct door_arg_t {
-	void*		data_ptr; /* Points to data */
+	const void*	data_ptr; /* Points to data */
 	door_desc_t*	desc_ptr; /* Currently unsupported.  Use NULL. */
 	size_t		data_size; /* Size of data. */
 	uint_t		desc_num; /* Currently unsupported.  Use 0. */
@@ -142,7 +142,7 @@ extern int door_info(int d, struct door_info* info);
 extern int door_tcred( door_tcred_t* info );
 
 /* Currently unimplemented. */
-extern int door_return( char* restrict data_ptr,
+extern int door_return( void* restrict data_ptr,
                         size_t data_size,
                         door_desc_t* restrict desc_ptr,
                         uint_t num_desc

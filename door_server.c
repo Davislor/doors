@@ -1418,7 +1418,7 @@ int door_info( int d, struct door_info* info )
 	return SUCCESS;
 }
 
-int door_return( char* restrict data_ptr,
+int door_return( void* restrict data_ptr,
                  size_t data_size,
                  door_desc_t* restrict desc_ptr,
                  uint_t num_desc
