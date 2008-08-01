@@ -38,7 +38,8 @@ PROGRAMS = 	test/error1		\
 		test/get_unique_id	\
 		test/client-server2	\
 		test/door_call1		\
-		test/sun2
+		test/sun2		\
+		test/unref1
 
 DOOR_OBJS =	door_server.o	\
 		door_client.o	\
