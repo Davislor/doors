@@ -39,7 +39,8 @@ PROGRAMS = 	test/error1		\
 		test/client-server2	\
 		test/door_call1		\
 		test/sun2		\
-		test/unref1
+		test/unref1		\
+		test/unref2
 
 DOOR_OBJS =	door_server.o	\
 		door_client.o	\
@@ -122,6 +123,10 @@ test/door_call1: test/door_call1.o libdoor.a
 test/unref1: test/unref1.o libdoor.a
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
 -o test/unref1 test/unref1.o libdoor.a
+
+test/unref2: test/unref2.o libdoor.a
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
+-o test/unref2 test/unref2.o libdoor.a
 
 # Obsolete:
 test/client-server1: test/client-server1.o libdoor.a

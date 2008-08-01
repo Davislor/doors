@@ -570,7 +570,9 @@ static inline void release_door_data( struct door_data* p )
 	}
 	else if ( ( ! p->revoked ) &&
 	          ( 2 == p->pointers ) &&
-	          ( DOOR_UNREF_MULTI & p->attr )
+	          ( ( DOOR_UNREF_MULTI & p->attr ) ||
+	            ( ( DOOR_UNREF & p->attr ) && ( ! p->was_unref ) )
+	          )
 	        ) {
 /* We should send an unreferenced invocation. */
 		--p->pointers;
@@ -1098,7 +1100,7 @@ int door_create( door_server_proc_t server_procedure,
 {
 	static const int ERROR = -1;
 	static const uint_t UNRECOGNIZED =
-~( DOOR_REFUSE_DESC | DOOR_UNREF_MULTI );
+~( DOOR_REFUSE_DESC | DOOR_UNREF | DOOR_UNREF_MULTI );
 
 	int did;		/* The descriptor of the new door */
 	int default_buf;	/* Used by getsockopt() */
