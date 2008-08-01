@@ -11,21 +11,32 @@
 #include "error.h"
 
 static const char* const door_path = "/tmp/door";
-static const char* const unref_msg = "Unreferenced invocation received.\n";
+static const char* const unref_msg = "Unreferenced invocation received";
 
-static void unref_server( const char* restrict to_print,
+static void unref_server( const int* restrict fd,
                           const void* restrict unref_data,
                           size_t unused1,
                           const door_desc_t* restrict unused2,
                           uint_t unused3
                         )
 {
+	struct door_info info;
+
 	assert( DOOR_UNREF_DATA == unref_data );
 	assert( 0 == unused1 );
 	assert( NULL == unused2 );
 	assert( 0 == unused3 );
 
-	printf(to_print);
+	if ( 0 != door_info( *fd, &info ) )
+		fatal_system_error( __FILE__, __LINE__, "door_info" );
+
+	printf(unref_msg);
+
+	if ( info.di_attributes & DOOR_IS_UNREF )
+		printf(" and DOOR_IS_UNREF is properly set.\n");
+	else
+		printf(" and DOOR_IS_UNREF is not set.\n");
+
 	fflush(stdout);
 
 	return;
@@ -33,10 +44,10 @@ static void unref_server( const char* restrict to_print,
 
 static void server_proc(void)
 {
-	int door;	/* A door descriptor. */
+	static int door;	/* A door descriptor. */
 
 	door = door_create( (door_server_proc_t)unref_server,
-	                    (void*)unref_msg,
+	                    &door,
 	                    DOOR_REFUSE_DESC | DOOR_UNREF_MULTI
 	                  );
 
@@ -58,10 +69,16 @@ static void server_proc(void)
 static void client_proc(void)
 {
 	int door1, door2, door3;	/* Door descriptors. */
+	struct door_info info;		/* Used by door_info(). */
 
 	door1 = door_open(door_path);
 	if ( 0 > door1 )
 		fatal_system_error( __FILE__, __LINE__, "door_open" );
+
+	if ( 0 != door_info( door1, &info ) )
+		fatal_system_error( __FILE__, __LINE__, "door_info" );
+
+	assert( !( info.di_attributes & DOOR_IS_UNREF ) );
 
 	printf("There should be exactly two 'Unreferenced invocation "
 	       "received' messages, both following this line.\n"
@@ -77,6 +94,11 @@ static void client_proc(void)
 	door1 = door_open(door_path);
 	if ( 0 > door1 )
 		fatal_system_error( __FILE__, __LINE__, "door_open" );
+
+	if ( 0 != door_info( door1, &info ) )
+		fatal_system_error( __FILE__, __LINE__, "door_info" );
+
+	assert( !( info.di_attributes & DOOR_IS_UNREF ) );
 
 	door2 = door_open(door_path);
 	if ( 0 > door2 )

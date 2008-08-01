@@ -67,6 +67,8 @@ struct door_data {
 	int		pointers;
 	bool		revoked;	/* Has this door been revoked? */
 	bool		attachments;	/* Is this thread attached? */
+/* Has this door been unreferenced at least once? */
+	bool		was_unref;
 	pthread_cond_t	can_listen;	/* Has this thread been bound? */
 	pthread_mutex_t	lock_data;	/* Own to modify this structure. */
 };
@@ -90,13 +92,13 @@ struct door_connect_t {
 /* Data the thread calling the door server procedure will need.
  */
 struct door_server_args_t {
-	int		fd;	
-	void*		data_ptr;
-	door_desc_t*	desc_ptr;
-	size_t		data_size;
-	uint_t		desc_num;
+	int			fd;	
+	void*			data_ptr;
+	door_desc_t*		desc_ptr;
+	size_t			data_size;
+	uint_t			desc_num;
 	door_server_proc_t	server_proc;
-	void*		cookie;
+	void*			cookie;
 };
 
 /* A thread which attempts to create, resize, destroy or move door_table 
@@ -520,6 +522,7 @@ static inline void increment_door_data_pointers( struct door_data* p )
 	assert( NULL != p );
 
 	++p->pointers;
+	p->attr &= ~DOOR_IS_UNREF;
 
 	return;
 }
@@ -571,6 +574,9 @@ static inline void release_door_data( struct door_data* p )
 	        ) {
 /* We should send an unreferenced invocation. */
 		--p->pointers;
+		p->was_unref = true;
+		p->attr |= DOOR_IS_UNREF;
+
 		unlock_door_data(p);
 		invoke_unreferenced(p);
 	}
@@ -793,8 +799,6 @@ static void* connection_listen( void* connection_ptr )
 
 /* Our attempt to read a request code failed.  Could this be because the
  * connection no longer exists?
- *
- * Support for unreferenced invocations goes here.
  */
 
 	release_door_data(p);
@@ -1078,7 +1082,7 @@ int door_attach( int d, const char* path )
 
 int door_create( door_server_proc_t server_procedure,
                  void* cookie,
-                 uint_t attributes
+                 door_attr_t attributes
                )
 /* See the SunOS 5.11 manual for a specification of how this function 
  * behaves.
@@ -1183,6 +1187,7 @@ int door_create( door_server_proc_t server_procedure,
 	p->attachments = false;
 	p->revoked = false;
 	p->pointers = 0;
+	p->was_unref = false;
 	pthread_cond_init( &p->can_listen, NULL );
 	pthread_mutex_init ( &p->lock_data, NULL );
 

@@ -127,9 +127,13 @@ typedef void (*door_server_proc_t)( void* restrict		cookie,
 /* For consistency with _door_thread_proc: */
 typedef door_server_proc_t	_door_server_proc;
 
+/* Changed the declaration of the attributes parameter to match that of the
+ * door_info structure; also left it as an unsigned int for backwards-
+ * compatibility.
+ */
 extern int door_create( door_server_proc_t server_procedure,
                         void* cookie,
-                        uint_t attributes
+                        door_attr_t attributes
                       );
 
 /* Currently unimplemented. */
