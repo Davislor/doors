@@ -127,6 +127,11 @@ static void client_proc(void)
 	if ( 0 > door3 )
 		fatal_system_error( __FILE__, __LINE__, "door_open" );
 
+/* On some systems, the second and third door_open() overlap with the
+ * first and second close.
+ */
+	sleep(1);
+
 	if ( 0 != door_close(door3) )
 		fatal_system_error( __FILE__, __LINE__, "door_close" );
 
