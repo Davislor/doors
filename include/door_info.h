@@ -18,7 +18,7 @@
 union door_ptr_conv_t {
 	uintptr_t		ui;
 	const void*		optr;
-	door_server_proc_t	fptr;
+	_door_server_proc	fptr;
 };
 
 static inline uint64_t optr2u64( const void* p )
@@ -31,7 +31,7 @@ static inline uint64_t optr2u64( const void* p )
 	return (uint64_t)scratch.ui;
 }
 
-static inline uint64_t fptr2u64( door_server_proc_t p )
+static inline uint64_t fptr2u64( _door_server_proc p )
 {
 	union door_ptr_conv_t scratch = {
 		.ui = 0
