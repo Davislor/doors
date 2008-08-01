@@ -118,6 +118,10 @@ test/door_call1: test/door_call1.o libdoor.a
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
 -o test/door_call1 test/door_call1.o libdoor.a
 
+test/unref1: test/unref1.o libdoor.a
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
+-o test/unref1 test/unref1.o libdoor.a
+
 # Obsolete:
 test/client-server1: test/client-server1.o libdoor.a
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \

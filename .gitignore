@@ -13,6 +13,7 @@ test/localserver2
 test/socketpair1
 test/fattach
 test/sun2
+test/unref1
 .libs
 .dotest
 

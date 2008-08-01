@@ -118,11 +118,11 @@ extern int door_call( int d, door_arg_t* params );
  * rather than char*.  Legacy code should still run, but if you want to
  * suppress compiler warnings, just cast to (door_server_proc_t).
  */
-typedef void (*door_server_proc_t)( void* restrict,
-                                    void* restrict,
-                                    size_t,
-                                    const door_desc_t* restrict,
-                                    uint_t
+typedef void (*door_server_proc_t)( void* restrict		cookie,
+                                    void* restrict		argp,
+                                    size_t			arg_size,
+                                    const door_desc_t* restrict	dp,
+                                    uint_t			n_desc
                                   );
 /* For consistency with _door_thread_proc: */
 typedef door_server_proc_t	_door_server_proc;
