@@ -60,7 +60,7 @@ typedef unsigned long long int	door_ptr_t;
 /* Placeholders */
 typedef struct door_desc_t	door_desc_t;
 typedef struct door_cred_t	door_cred_t;
-typedef struct ucred_t	ucred_t;
+typedef struct ucred_t		ucred_t;
 typedef struct door_tcred_t	door_tcred_t;
 
 /* door_info takes a struct door_info*, but door_server_create takes a 
@@ -124,7 +124,7 @@ typedef void (*door_server_proc_t)( void* restrict,
                                     uint_t
                                   );
 /* For consistency with _door_thread_proc: */
-typedef door_server_proc_t _door_server_proc;
+typedef door_server_proc_t	_door_server_proc;
 
 extern int door_create( door_server_proc_t server_procedure,
                         void* cookie,
@@ -132,11 +132,11 @@ extern int door_create( door_server_proc_t server_procedure,
                       );
 
 /* Currently unimplemented. */
-extern int door_cred (door_cred_t* info);
+extern int door_cred( door_cred_t* info );
 
-extern int door_getparam(int d, int param, size_t* out);
+extern int door_getparam( int d, int param, size_t* out );
 
-extern int door_info(int d, struct door_info* info);
+extern int door_info( int d, struct door_info* info );
 
 /* Probably never will be implemented.  Trusted Solaris only. */
 extern int door_tcred( door_tcred_t* info );
@@ -148,20 +148,20 @@ extern int door_return( void* restrict data_ptr,
                         uint_t num_desc
                       );
 
-extern int door_revoke(int d);
+extern int door_revoke( int d );
 
 /* Currently unimplemented. */
-typedef void (* door_thread_proc_t)(door_info_t*);
+typedef void (* door_thread_proc_t)( door_info_t* );
 /* For backward-compatibility: */
-typedef door_thread_proc_t _door_thread_proc;
+typedef door_thread_proc_t	_door_thread_proc;
 
 extern door_thread_proc_t
 door_server_create( door_thread_proc_t create_proc );
 
-extern int door_setparam(int d, int param, size_t val);
+extern int door_setparam( int d, int param, size_t val );
 
 /* Currently unimplemented. */
-extern int door_ucred(ucred_t **info);
+extern int door_ucred( ucred_t **info );
 
 /* Currently unimplemented. */
 extern int door_unbind(void);
