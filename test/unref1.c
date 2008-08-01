@@ -71,6 +71,9 @@ static void client_proc(void)
 	if ( 0 != door_close(door1) )
 		fatal_system_error( __FILE__, __LINE__, "door_close" );
 
+/* Give the server time to detect that we have closed the descriptor. */
+	sleep(1);
+
 	door1 = door_open(door_path);
 	if ( 0 > door1 )
 		fatal_system_error( __FILE__, __LINE__, "door_open" );

@@ -520,6 +520,7 @@ static inline void increment_door_data_pointers( struct door_data* p )
 	assert( NULL != p );
 
 	++p->pointers;
+
 	return;
 }
 
