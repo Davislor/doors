@@ -123,6 +123,8 @@ typedef void (*door_server_proc_t)( void* restrict,
                                     const door_desc_t* restrict,
                                     uint_t
                                   );
+/* For consistency with _door_thread_proc: */
+typedef door_server_proc_t _door_server_proc;
 
 extern int door_create( door_server_proc_t server_procedure,
                         void* cookie,
@@ -149,10 +151,12 @@ extern int door_return( char* restrict data_ptr,
 extern int door_revoke(int d);
 
 /* Currently unimplemented. */
-typedef void (* _door_thread_proc) (door_info_t*);
+typedef void (* door_thread_proc_t)(door_info_t*);
+/* For backward-compatibility: */
+typedef door_thread_proc_t _door_thread_proc;
 
-extern _door_thread_proc
-door_server_create( _door_thread_proc create_proc );
+extern door_thread_proc_t
+door_server_create( door_thread_proc_t create_proc );
 
 extern int door_setparam(int d, int param, size_t val);
 
