@@ -972,6 +972,32 @@ static int spawn_door_server( int d )
 	return retval;
 }
 
+static inline struct door_data* local_door_data( int d )
+/* If d is the descriptor of a local door, return a pointer to its associated
+ * door_data structure.  Otherwise, return NULL.
+ *
+ * Returns the pointer, rather than true, to avoid a race condition in which
+ * a door might be revoked after we return true, but before we copy the
+ * pointer.
+ */
+{
+	struct door_data* retval;
+
+	if ( NULL == door_table )
+		return NULL;
+
+	lock_door_table();
+
+	if ( open_max <= (size_t)d )
+		retval = NULL;
+	else
+		retval = door_table[d];
+
+	unlock_door_table();
+
+	return retval;
+}
+
 /* Functions <door.h> exports: */
 
 int door_attach( int d, const char* path )
@@ -1058,9 +1084,12 @@ int door_attach( int d, const char* path )
 	if ( 0 != listen( d, SOMAXCONN ) )
 		return ERROR;
 
-	lock_door_table();
-	p = door_table[d];
-	unlock_door_table();
+	p = local_door_data(d);
+
+	if ( NULL == p ) {
+		errno = EBADF;
+		return ERROR;
+	}
 
 /* Now, we can tell the listening thread to listen.  The POSIX standard tells
  * us to own this mutex when we call pthread_cond_signal() if we want 
@@ -1260,8 +1289,6 @@ int door_detach ( const char* path )
 int door_getparam (int d, int param, size_t* out)
 /* See the SunOS 5.11 manual for a specification of how this function
  * should work.
- *
- * At present, this function is only implemented for local doors.
  */
 {
 	static const int ERROR = -1;
@@ -1281,11 +1308,9 @@ int door_getparam (int d, int param, size_t* out)
 		return ERROR;
 	}
 
-	if ( ( NULL == door_table ) ||
-	     ( 0 > d ) ||
-	     ( (size_t)d >= open_max ) ||
-	     ( NULL == door_table[d] )
-	   ) {
+	p = local_door_data(d);
+
+	if ( NULL == p ) {
 /* Not a local door. */
 		struct msg_request outgoing;
 		uint32_t type;
@@ -1322,10 +1347,6 @@ int door_getparam (int d, int param, size_t* out)
 	}
 
 /* A local door. */
-	lock_door_table();
-	p = door_table[d];
-	unlock_door_table();
-
 	switch (param) {
 		case DOOR_PARAM_DATA_MAX:
 			lock_door_data(p);
@@ -1363,11 +1384,9 @@ int door_info( int d, struct door_info* info )
 		return ERROR;
 	}
 
-	if ( ( NULL == door_table ) ||
-	     ( 0 > d ) ||
-	     ( (size_t)d >= open_max ) ||
-	     ( NULL == door_table[d] )
-	   ) {
+	p = local_door_data(d);
+
+	if ( NULL == p ) {
 /* Not a local door. */
 		struct msg_request outgoing;
 		long long int code;
@@ -1411,9 +1430,6 @@ int door_info( int d, struct door_info* info )
 	}
 
 /* A local door. */
-	lock_door_table();
-	p = door_table[d];
-	unlock_door_table();
 
 	lock_door_data(p);	/* Necessary? */
 	info->di_target = p->target;
@@ -1446,7 +1462,6 @@ int door_return( void* restrict data_ptr,
  * Other limitations:
  * - There should be a way to tell the library to free a 
  * dynamically-allocated buffer.  (Probably a separate function.)
- * - The data_ptr argument should really be a pointer to void.
  */
 {
 	static const int ERROR = -1;
@@ -1518,21 +1533,13 @@ int door_revoke( int d )
 
 	lock_door_table();
 
-	if ( ( NULL == door_table ) ||
-	     ( 0 > d ) ||
-	     ( (size_t)d >= open_max ) ||
-	     ( NULL == door_table[d] )
-	   ) {
+	p = local_door_data(d);
+
+	if ( NULL == p ) {
 		errno = EBADF;
-		unlock_door_table();
 		return ERROR;
 	}
 
-	p = door_table[d];
-/* We were getting into a race with door_listen(). */
-	lock_door_data(p);
-	door_table[d] = NULL;
-	unlock_door_table();
 	close(d);
 
 	p->revoked = true;
@@ -1560,11 +1567,9 @@ int door_setparam ( int d, int param, size_t val )
 	int scratch;	/* Used by setsockopt() */
 	struct door_data* p;
 
-	if ( ( NULL == door_table ) ||
-	     ( 0 > d ) ||
-	     ( (size_t)d >= open_max ) ||
-	     ( NULL == door_table[d] )
-	   ) {
+	p = local_door_data(d);
+
+	if ( NULL == p ) {
 /* Not a local door. */
 		errno = EBADF;
 		return ERROR;
@@ -1573,10 +1578,6 @@ int door_setparam ( int d, int param, size_t val )
 /* Possible race with door_revoke setting door_table[d] to NULL? */
 
 /* A local door. */
-	lock_door_table();
-	p = door_table[d];
-	unlock_door_table();
-
 	switch (param) {
 /* To change both DOOR_PARAM_DATA_MIN and DOOR_PARAM_DATA_MAX, you must 
  * take care to leave the door in a callable state after each step.
