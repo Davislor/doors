@@ -115,16 +115,16 @@ extern int door_call( int d, door_arg_t* params );
 /* This type is subtly different from the original implementation: the const
  * and restrict qualifiers are new, and the argument buffer is now a void*
  * rather than char*.  Legacy code should still run, but if you want to
- * suppress compiler warnings, just cast to (_door_server_proc).
+ * suppress compiler warnings, just cast to (door_server_proc_t).
  */
-typedef void (*_door_server_proc)( void* restrict,
-                                   void* restrict,
-                                   size_t,
-                                   const door_desc_t* restrict,
-                                   uint_t
-                                 );
+typedef void (*door_server_proc_t)( void* restrict,
+                                    void* restrict,
+                                    size_t,
+                                    const door_desc_t* restrict,
+                                    uint_t
+                                  );
 
-extern int door_create( _door_server_proc server_procedure,
+extern int door_create( door_server_proc_t server_procedure,
                         void* cookie,
                         uint_t attributes
                       );

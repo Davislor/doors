@@ -58,7 +58,7 @@ int main(void)
 	static const unsigned int NEW_MIN = 1024U;
 	static const unsigned int NEW_MAX = 4096U;
 
-	d = door_create( (_door_server_proc)nop_server,
+	d = door_create( (door_server_proc_t)nop_server,
 	                 NULL,
 	                 DOOR_REFUSE_DESC
 	               );

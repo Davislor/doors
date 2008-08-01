@@ -52,7 +52,7 @@ static const size_t open_default = 1024U;
 
 struct door_data {
 	pid_t		target;			/* Server PID */
-	_door_server_proc	server_proc;	/* Points to server proc */
+	door_server_proc_t	server_proc;	/* Points to server proc */
 	void*		cookie;			/* Passed to the above */
 	door_attr_t	attr;			/* Attributes */
 	door_id_t	id;			/* System-wide unique ID */
@@ -95,7 +95,7 @@ struct door_server_args_t {
 	door_desc_t*	desc_ptr;
 	size_t		data_size;
 	uint_t		desc_num;
-	_door_server_proc	server_proc;
+	door_server_proc_t	server_proc;
 	void*		cookie;
 };
 
@@ -417,7 +417,7 @@ static void* start_unreferenced_invocation_thread( void* p )
 {
 	static const int invalid_fd = -1;
 
-	const _door_server_proc server_proc =
+	const door_server_proc_t server_proc =
 ((struct door_data*)p)->server_proc;
 	void* const cookie = ((struct door_data*)p)->cookie;
 
@@ -1075,7 +1075,7 @@ int door_attach( int d, const char* path )
 	return SUCCESS;
 }
 
-int door_create( _door_server_proc server_procedure,
+int door_create( door_server_proc_t server_procedure,
                  void* cookie,
                  uint_t attributes
                )

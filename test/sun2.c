@@ -38,7 +38,7 @@ main(int argc, char *argv[])
 /* Try to remove any dangling doors. */
 	door_detach("/tmp/door");
 
-	if ((did = door_create((_door_server_proc)server, 0, 0)) < 0) {
+	if ((did = door_create((door_server_proc_t)server, 0, 0)) < 0) {
 		perror("door_create");
 		exit(1);
 	}

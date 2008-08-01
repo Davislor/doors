@@ -68,7 +68,7 @@ static void server_proc(void)
 
 	door_detach(door_path);
 
-	door = door_create( (_door_server_proc)echo,
+	door = door_create( (door_server_proc_t)echo,
 	                    (void*)stdout,
 	                    DOOR_REFUSE_DESC
 	                  );
@@ -102,7 +102,7 @@ static void client_proc(void)
 	if ( 0 > door )
 		fatal_system_error( __FILE__, __LINE__, "door_open" );
 
-	params.data_ptr = (void*)message;
+	params.data_ptr = message;
 	params.data_size = strlen(message);
 	if ( 0 != door_call( door, &params ) )
 		fatal_system_error( __FILE__, __LINE__, "door_call" );

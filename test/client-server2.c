@@ -55,7 +55,7 @@ static int server_process(void)
 
 	door_detach(door_path);
 
-	door = door_create( (_door_server_proc)dummy_server,
+	door = door_create( (door_server_proc_t)dummy_server,
 	                    (void*)&door_path,
 	                    DOOR_REFUSE_DESC
 	                  );
