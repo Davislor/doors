@@ -1,3 +1,22 @@
+/***************************************************************************
+ * Portland Doors                                                          *
+ * unref1.c:  Test driver for the DOOR_UNREF_MULTI and DOOR_IS_UNREF       *
+ *            flags.                                                       *
+ *                                                                         *
+ *            Correct output is as follows:                                *
+ *                                                                         *
+ *            There should be exactly two "Unreferenced invocation         *
+ *            received" messages, both following this line.                *
+ *            Unreferenced invocation received and DOOR_IS_UNREF is        *
+ *            properly set.                                                *
+ *            There should be at least one such message following this     *
+ *            line.                                                        *
+ *            Unreferenced invocation received and DOOR_IS_UNREF is        *
+ *            properly set.                                                *
+ *                                                                         *
+ * Released under the LGPL version 3 (see COPYING).  Copyright (C) 2008    *
+ * Loren B. Davis.  Based on work by Jason Lango.                          *
+ ***************************************************************************/
 
 #include "standards.h"
 
@@ -80,8 +99,8 @@ static void client_proc(void)
 
 	assert( !( info.di_attributes & DOOR_IS_UNREF ) );
 
-	printf("There should be exactly two 'Unreferenced invocation "
-	       "received' messages, both following this line.\n"
+	printf("There should be exactly two \"Unreferenced invocation "
+	       "received\" messages, both following this line.\n"
 	      );
 	fflush(stdout);
 
