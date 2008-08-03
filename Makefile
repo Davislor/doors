@@ -42,9 +42,7 @@ PROGRAMS = 	test/error1		\
 		test/unref1		\
 		test/unref2
 
-DOOR_OBJS =	door_server.o	\
-		door_client.o	\
-		error.o
+DOOR_OBJS =	door.o
 
 OBJS =		test/get_unique_id.o	\
 		test/error1.o		\
@@ -96,9 +94,9 @@ test/sun2: test/sun2.o libdoor.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/sun2 \
 test/sun2.o libdoor.a
 
-test/error1: test/error1.o libdoor.a
+test/error1: test/error1.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/error1 \
-test/error1.o libdoor.a
+test/error1.o
 
 test/localserver1: test/localserver1.o libdoor.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) $(DEBUGFLAGS) -o test/localserver1 \

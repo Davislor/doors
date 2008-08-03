@@ -9,9 +9,23 @@
 #ifndef H_ERROR_INCLUDED
 #define H_ERROR_INCLUDED
 
-extern void _syserr( const char* desc );
+#include "standards.h"
+
+#include <stdio.h>
+#include <stdlib.h>
 
 #define _str(x) #x
+
+static void _syserr( const char* desc )
+/* Prints an informative error message and exits. */
+{
+	fflush(stdout);
+	perror(desc);
+
+	exit(EXIT_FAILURE);
+
+	/* NOTREACHED */
+}
 
 #define fatal_system_error(file,line,desc) \
 _syserr( "(" file ", line " _str(line) ") " desc )
