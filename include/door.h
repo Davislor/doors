@@ -105,7 +105,7 @@ typedef struct door_arg_t {
 #define DOOR_PARAM_DESC_MAX	3
 
 /* This argument to a door server indicates that it's been unreferenced. */
-extern char* const DOOR_UNREF_DATA;
+extern const char* const DOOR_UNREF_DATA;
 
 /* Currently unimplemented. */
 extern int door_bind(int did);
