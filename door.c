@@ -138,7 +138,7 @@ static pthread_key_t door_arg_buf;
 static pthread_key_t server_arg_buf;
 
 /* It doesn't matter what this refers to, only that it's unique: */
-char* const DOOR_UNREF_DATA = { 0 };
+const char* const DOOR_UNREF_DATA = { 0 };
 
 /* Internal functions with file scope: */
 
