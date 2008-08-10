@@ -105,7 +105,7 @@ typedef struct door_arg_t {
 #define DOOR_PARAM_DESC_MAX	3
 
 /* This argument to a door server indicates that it's been unreferenced. */
-extern char* const restrict	DOOR_UNREF_DATA;
+extern char* const DOOR_UNREF_DATA;
 
 /* Currently unimplemented. */
 extern int door_bind(int did);
@@ -119,10 +119,10 @@ extern int door_call( int d, door_arg_t* params );
  * suppress compiler warnings, just cast to (door_server_proc_t).
  */
 typedef void (*door_server_proc_t)( void* restrict		cookie,
-                                    void* restrict		argp,
-                                    size_t			arg_size,
-                                    const door_desc_t* restrict	dp,
-                                    uint_t			n_desc
+                                      const void* restrict	argp,
+                                      size_t			arg_size,
+                                      const door_desc_t* restrict	dp,
+                                      uint_t			n_desc
                                   );
 /* For consistency with _door_thread_proc: */
 typedef door_server_proc_t	_door_server_proc;

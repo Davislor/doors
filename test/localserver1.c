@@ -24,31 +24,31 @@
 #include <unistd.h>
 
 static void proc1( void* restrict cookie,
-                   void* restrict argp,
-                   size_t arg_size,
-                   const door_desc_t* restrict dp,
-                   uint_t n_desc
-                 )
+                     const void* restrict argp,
+                     size_t arg_size,
+                     const door_desc_t* restrict dp,
+                     uint_t n_desc
+                   )
 {
 
 }
 
 static void proc2( void* restrict cookie,
-                   void* restrict argp,
-                   size_t arg_size,
-                   const door_desc_t* restrict dp,
-                   uint_t n_desc
-                 )
+                     const void* restrict argp,
+                     size_t arg_size,
+                     const door_desc_t* restrict dp,
+                     uint_t n_desc
+                   )
 {
 
 }
 
 static void proc3( void* restrict cookie,
-                   void* restrict argp,
-                   size_t arg_size,
-                   const door_desc_t* restrict dp,
-                   uint_t n_desc
-                 )
+                     const void* restrict argp,
+                     size_t arg_size,
+                     const door_desc_t* restrict dp,
+                     uint_t n_desc
+                   )
 {
 
 }
