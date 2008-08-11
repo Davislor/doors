@@ -53,14 +53,14 @@ static size_t page_size = 0;
  */
 
 enum fd_type {
-	fd_none = 0;		/* This is not a door descriptor at all. */
-	fd_server;		/* Returned by door_create() */
-	fd_client;		/* Returned by door_open() */
+	fd_none = 0,		/* This is not a door descriptor at all. */
+	fd_server,		/* Returned by door_create() */
+	fd_client		/* Returned by door_open() */
 };
 
 struct fd_data {
-	enum fd_type type;	/* The type of data. */
-	void* data;		/* A pointer to the data, or NULL. */
+	enum fd_type	type;	/* The type of data. */
+	void*		data;	/* A pointer to the data, or NULL. */
 };
 
 struct door_data {
@@ -87,14 +87,16 @@ struct door_data {
 };
 
 struct conn_data {
-	pthread_mutex_t	desc_lock	/* A mutex lock on this descriptor. */
-}
+	pthread_mutex_t	desc_lock;	/* A mutex lock on this descriptor. */
+};
 
-/* The door table is an array of pointers to door_data structures.  A
- * non-NULL value of door_table[d] means that d is a local door with
- * heap-allocated data.
+/* The door table is an array of fd_data structures.  The type member denotes
+ * the descriptor type: a value of fd_server in door_table[d].type means that
+ * d is a local door, returned by door_create().  A value of fd_client means
+ * that d is a descriptor returned by door_open().  A value of fd_none,
+ * defined as 0, means that d is not a door descriptor at all.
  */
-static struct door_data** door_table = NULL;
+static struct fd_data* door_table = NULL;
 
 /* The thread start procedure that listens to each new connection
  * receives a pointer to one of these structures.  The listen_fd member
@@ -160,8 +162,36 @@ static void prepare_fork_handler(void)
 /* Acquires all critical locks before a fork().
  */
 {
+	size_t i;	/* Loop counter. */
+
 	if ( 0 != pthread_rwlock_wrlock(&door_table_lock) )
 		fatal_system_error(__FILE__, __LINE__, "pthread_rwlock_wrlock");
+
+	if (door_table) {
+/* We must acquire every lock on every local door's data.  This could take a
+ * while.  If it takes too long, there's a bug: no routine should hold the
+ * lock for more than a minimal number of instructions.
+ */
+		for ( i = 0; i < open_max; ++i )
+			if ( fd_server == door_table[i].type ) {
+				struct door_data* const p = door_table[i].data;
+
+				if ( 0 !=
+				     pthread_mutex_lock(&p->lock_data)
+				   ) {
+fatal_system_error(__FILE__,__LINE__,"pthread_mutex_lock");
+				} /* end if */
+			} /* end if (fd_server) */
+			else if ( fd_client == door_table[i].type ) {
+				struct conn_data* const p = door_table[i].data;
+
+				if ( 0 !=
+				     pthread_mutex_lock(&p->desc_lock)
+				   ) {
+fatal_system_error(__FILE__,__LINE__,"pthread_mutex_lock");
+				} /* end if */
+			} /* end if (fd_client) */
+		} /* end for */
 
 	return;
 }
@@ -170,8 +200,31 @@ static void parent_fork_handler(void)
 /* Releases all critical locks after a fork().
  */
 {
+	size_t i;	/* Loop counter. */
+
 	if ( 0 != pthread_rwlock_unlock(&door_table_lock) )
 		fatal_system_error(__FILE__, __LINE__, "pthread_rwlock_unlock");
+
+		for ( i = 0; i < open_max; ++i ) {
+			if ( fd_server == door_table[i].type ) {
+				struct door_data* const p = door_table[i].data;
+
+				if ( 0 !=
+				     pthread_mutex_unlock(&p->lock_data)
+				   ) {
+fatal_system_error(__FILE__,__LINE__,"pthread_mutex_unlock");
+				} /* end if */
+			} /* end if (fd_server) */
+			else if ( fd_client == door_table[i].type ) {
+				struct conn_data* const p = door_table[i].data;
+
+				if ( 0 !=
+				     pthread_mutex_unlock(&p->desc_lock)
+				   ) {
+fatal_system_error(__FILE__,__LINE__,"pthread_mutex_unlock");
+				} /* end if */
+			} /* end if (fd_client) */
+		} /* end for */
 
 	return;
 }
@@ -185,21 +238,59 @@ static void child_fork_handler(void)
  * process.
  */
 {
-	size_t i;
+	size_t i;	/* Loop counter. */
 
 	if (door_table) {
 /* Close all local doors.  The table is potentially very large, but 
  * we skip over most of it.
  */
 		for ( i = 0; i < open_max; ++i )
-			if ( door_table[i] ) {
-				free(door_table[i]);
-				close(i);
-			}
+			if ( fd_server == door_table[i].type ) {
+				struct door_data* const p =
+door_table[i].data;
 
-		free(door_table);
-		door_table = NULL;
-	}
+				door_table[i].type = fd_none;
+				close(i);
+/* There are no threads handling doors in the child process; therefore, no
+ * threads are waiting on the condition variable, and it is safe to destroy.
+ */
+				if ( 0 != pthread_cond_destroy(&p->can_listen)
+				   ) {
+fatal_system_error(__FILE__,__LINE__,"pthread_cond_destroy");
+				}
+
+/* We acquired all of these locks in prepare_fork_handler: */
+				if ( 0 != pthread_mutex_unlock(&p->lock_data)
+				   ) {
+fatal_system_error(__FILE__,__LINE__,"pthread_mutex_unlock");
+				}
+
+/* No thread should re-acquire this mutex, because there are no server threads
+ * in the child process, the file descriptor has already been closed, and the
+ * door_table entry is marked empty.
+ */
+				if ( 0 != pthread_mutex_destroy(&p->lock_data)
+				   ) {
+fatal_system_error(__FILE__,__LINE__,"pthread_mutex_destroy");
+				}
+
+				free(p);
+				door_table[i].data = NULL;
+			} /* end if (fd_server) */
+			else if ( fd_client == door_table[i].type ) {
+				struct conn_data * const p =
+door_table[i].data;
+
+/* Release the lock on a client descriptor. */
+				if ( 0 != pthread_mutex_unlock(&p->desc_lock)
+				   ) {
+fatal_system_error(__FILE__,__LINE__,"pthread_mutex_unlock");
+				}
+			} /* end if ( fd_client ) */
+/* We no longer destroy the door_table, because client door descriptors could
+ * still be open.
+ */
+	} /* end for */
 
 	if ( 0 != pthread_rwlock_unlock(&door_table_lock) )
 		fatal_system_error(__FILE__, __LINE__, "pthread_rwlock_unlock");
@@ -221,6 +312,9 @@ static void client_init(void)
 	assert( 0 < x && SIZE_MAX > (unsigned long)x );
 /* Should also check that the result is suitable for posix_memalign().
  * I.e., a power of 2 and a multiple of sizeof(void*).
+ *
+ * Would any sane system even have posix_memalign() if it couldn't accept the
+ * value of sysconf(_SC_PAGE_SIZE)?  What would be the point?
  */
 
 	page_size = (size_t)x;
@@ -308,7 +402,7 @@ static door_id_t get_unique_id (void)
 	return id;
 }
 
-static struct door_data** init_door_table(void)
+static struct fd_data* init_door_table(void)
 /* Initializes door_table, setting all of its bits to zero.  If the 
  * value of {OPEN_MAX}, as reported by sysconf(), is more than 0 but 
  * less than 1,024, door_table has {OPEN_MAX} entries.  Otherwise, it 
@@ -349,12 +443,13 @@ static struct door_data** init_door_table(void)
 			open_max = (size_t)sys;
 
 		door_table =
-(struct door_data**)malloc( open_max * sizeof(struct door_data*) );
+(struct fd_data*)malloc( open_max * sizeof(struct fd_data) );
 
 		if (door_table)
-			for ( i = 0; i < open_max; ++i )
-				door_table[i] = NULL;
-
+			for ( i = 0; i < open_max; ++i ) {
+				door_table[i].type = fd_none;
+				door_table[i].data = NULL;
+			}
 	} /* end if (!door_table) */
 
 /* We must release this lock unconditionally: */
@@ -364,7 +459,7 @@ static struct door_data** init_door_table(void)
 	return door_table;
 }
 
-static struct door_data** resize_door_table( int did )
+static struct fd_data* resize_door_table( int did )
 /* Resize door_table to have at least did entries.
  *
  * The implementation finds a new size greater than or equal to did, 
@@ -390,7 +485,9 @@ static struct door_data** resize_door_table( int did )
 		guess = ( (size_t)did + 1024 ) & ~(size_t)1023;
 
 		sys = sysconf(_SC_OPEN_MAX);
-/* Don't crash if sysconf() reports -1 (no fixed limit). */
+/* Don't crash if sysconf() reports -1 (no fixed limit).  Do abort if the
+ * program requests more descriptors than the system supports.
+ */
 		assert( 0 > sys || sys > did );
 
 /* Allocating more than {OPEN_MAX} entries wastes space. */
@@ -403,13 +500,14 @@ static struct door_data** resize_door_table( int did )
  * sys > did or sys == -1.  We checked earlier that open_max <= did.
  * Therefore, new_max > did >= open_max.
  */
-		door_table = (struct door_data**)
-realloc( door_table, new_max * sizeof(struct door_data*) );
+		door_table = (struct fd_data*)
+realloc( door_table, new_max * sizeof(struct fd_data) );
 
 /* The implementation depends on empty entries being zeroed out. */
 		if (door_table) {
 			for ( i = open_max; i < new_max; ++i )
-				door_table[i] = NULL;
+				door_table[i].type = fd_none;
+				door_table[i].data = NULL;
 
 			open_max = new_max;
 		} /* end if (door_table) */
@@ -869,13 +967,17 @@ static void* door_listen( void* int_ptr )
 	free(int_ptr);
 
 	lock_door_table();
-	p = door_table[d];
-	unlock_door_table();	
 
-	if ( NULL == p ) {
+	if ( fd_server != door_table[d].type ) {
 /* We lost a race with door_revoke(), and the door is no longer valid. */
+		unlock_door_table();
 		return NULL;
 	}
+
+	p = door_table[d].data;
+	unlock_door_table();	
+
+	assert( NULL != p );
 
 	lock_door_data(p);
 	increment_door_data_pointers(p);
@@ -1026,10 +1128,10 @@ static inline struct door_data* local_door_data( int d )
 
 	lock_door_table();
 
-	if ( open_max <= (size_t)d )
+	if ( open_max <= (size_t)d || fd_server != door_table[d].type )
 		retval = NULL;
 	else
-		retval = door_table[d];
+		retval = door_table[d].data;
 
 	unlock_door_table();
 
@@ -1369,64 +1471,50 @@ int door_call( int door, door_arg_t* params )
 }
 
 int door_close( int d )
-/* Drop-in replacement for close().  Currently, just a wrapper for
- * close(), but I anticipate needing to add per-door data structures in
- * the future.  If so, we will need this function to avoid leaking
- * memory, and it will be difficult to get programmers to switch to it
- * after using close().
- */
-{
-	return close(d);
-}
-
-int door_open( const char* path )
-/* Drop-in replacement for open().  Currently, this opens a door 
- * descriptor, which is a socket connected to the UNIX domain socket at 
- * the requested pathname.
+/* Drop-in replacement for close().  Closes the door descriptor, and also
+ * frees its associated memory.
  */
 {
 	static const int ERROR = -1;
-	static pthread_once_t once_control = PTHREAD_ONCE_INIT;
-	struct sockaddr_un address;	/* Address to connect to */
-/* File descriptor of the new door: */
-	int d;
-	size_t path_len;		/* Length of path. */
 
-	pthread_once( &once_control, client_init );
+	int retval;
+	struct conn_data* p;
 
-	if ( NULL == path ) {
-		errno = EINVAL;
-		return ERROR;
-	}
-
-	d = socket( AF_UNIX, SOCK_SEQPACKET, 0 );
-	if ( 0 > d )
-		return ERROR;
-
-	path_len = strlen(path);
-	if ( offsetof( struct sockaddr_un, sun_path ) + path_len >=
-	     sizeof(struct sockaddr_un)
+	lock_door_table();
+	if ( 0 > d ||
+	     NULL == door_table ||
+	     open_max <= (size_t)d ||
+	     fd_client != door_table[d].type 
 	   ) {
-		errno = ENAMETOOLONG;
+		unlock_door_table();
+		errno = EBADF;
 		return ERROR;
 	}
-
-	address.sun_family = AF_UNIX;
-	memcpy( &address.sun_path, path, path_len );
-	address.sun_path[path_len] = '\0';
-
-	if ( 0 != connect( d,
-	                   (const struct sockaddr*)&address, 
-	                   offsetof( struct sockaddr_un, sun_path ) + path_len
-	                 )
-	   ) {
-		close(d);
-		return ERROR;
+	else {
+		p = door_table[d].data;
+		door_table[d].type = fd_none;
+		unlock_door_table();
+		assert( NULL != p );
 	}
 
-	fcntl( d, F_SETFL, FD_CLOEXEC );
+/* Lock the mutex to give operations in progress a chance to complete. */
+	if ( 0 != pthread_mutex_lock(&p->desc_lock) )
+		fatal_system_error( __FILE__, __LINE__, "desc_lock" );
 
-	return d;
+	retval = close(d);
+
+/* Unlock the mutex in order to destroy it.  No other thread should re-acquire
+ * it, because the door descriptor has now been closed and marked invalid.
+ */
+	if ( 0 != pthread_mutex_unlock(&p->desc_lock) )
+		fatal_system_error( __FILE__, __LINE__, "mutex_unlock" );
+
+	if ( 0 != pthread_mutex_destroy(&p->desc_lock) )
+		fatal_system_error( __FILE__, __LINE__, "mutex_destroy" );
+
+	free(p);
+
+	return retval;
 }
 
 int door_create( door_server_proc_t server_procedure,
@@ -1523,7 +1611,8 @@ int door_create( door_server_proc_t server_procedure,
 	}
 
 	lock_door_table();
-	door_table[did] = p;
+	door_table[did].type = fd_server;
+	door_table[did].data = p;
 	unlock_door_table();
 
 	p->target = getpid();
@@ -1758,6 +1847,90 @@ int door_info( int d, struct door_info* info )
 	unlock_door_data(p);
 
 	return SUCCESS;
+}
+
+int door_open( const char* path )
+/* Drop-in replacement for open().  Currently, this opens a door 
+ * descriptor, which is a socket connected to the UNIX domain socket at 
+ * the requested pathname.
+ */
+{
+	static const int ERROR = -1;
+	static pthread_once_t once_control = PTHREAD_ONCE_INIT;
+	struct sockaddr_un address;	/* Address to connect to */
+/* File descriptor of the new door: */
+	int d;
+	size_t path_len;		/* Length of path. */
+
+	pthread_once( &once_control, client_init );
+
+	if ( NULL == path ) {
+		errno = EINVAL;
+		return ERROR;
+	}
+
+	d = socket( AF_UNIX, SOCK_SEQPACKET, 0 );
+	if ( 0 > d )
+		return ERROR;
+
+	path_len = strlen(path);
+	if ( offsetof( struct sockaddr_un, sun_path ) + path_len >=
+	     sizeof(struct sockaddr_un)
+	   ) {
+		errno = ENAMETOOLONG;
+		return ERROR;
+	}
+
+	address.sun_family = AF_UNIX;
+	memcpy( &address.sun_path, path, path_len );
+	address.sun_path[path_len] = '\0';
+
+	if ( 0 != connect( d,
+	                   (const struct sockaddr*)&address, 
+	                   offsetof( struct sockaddr_un, sun_path ) + path_len
+	                 )
+	   ) {
+		close(d);
+		return ERROR;
+	}
+
+	fcntl( d, F_SETFL, FD_CLOEXEC );
+
+	if ( open_max <= (size_t)d ) {
+		if ( NULL == resize_door_table(d) ) {
+			close(d);
+			errno = ENOMEM;
+			return ERROR;
+		}
+	}
+
+	lock_door_table();
+	door_table[d].data =
+(struct conn_data*)malloc(sizeof(struct conn_data));
+
+	if ( NULL == door_table[d].data ) {
+		close(d);
+		unlock_door_table();
+		errno = ENOMEM;
+		return ERROR;
+	}
+	else if ( 0 !=
+pthread_mutex_init( & ( (struct conn_data*)door_table[d].data )->desc_lock,
+                    NULL
+                  )
+	        ) {
+			free(door_table[d].data);
+			door_table[d].data = NULL;
+			unlock_door_table();
+			close(d);
+			return ERROR;
+	}
+	else {
+		door_table[d].type = fd_client;
+		unlock_door_table();
+	}
+
+	return d;
 }
 
 int door_return( void* restrict data_ptr,
