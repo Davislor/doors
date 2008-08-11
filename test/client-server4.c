@@ -21,9 +21,10 @@
 #include "door.h"
 
 time_t start_time = 0;
+int door = -1;
 
 static void delay_proc( const unsigned int* restrict delay,
-                        const void* restrict argp,
+                        const unsigned* restrict argp,
                         size_t arg_size,
                         const door_desc_t* restrict dp,
                         uint_t n_desc
@@ -33,7 +34,7 @@ static void delay_proc( const unsigned int* restrict delay,
 
 	printf( "Slept %u seconds.\n", *delay );
 
-	door_return( delay, sizeof(unsigned int), NULL, 0 );
+	door_return( argp, sizeof(unsigned int), NULL, 0 );
 }
 
 static void server_proc(void)
@@ -59,10 +60,11 @@ static void server_proc(void)
 static void* spawn_thread( void* x )
 {
 	struct door_arg_t args;
-	unsigned retval;
-	int door = *(int*)x;
+	unsigned retval = *(unsigned*)x;
 
 	bzero( &args, sizeof(args) );
+	args.data_ptr = &retval;
+	args.data_size = sizeof(unsigned);
 	args.rbuf = &retval;
 	args.rsize = sizeof(retval);
 
@@ -83,8 +85,8 @@ static void* spawn_thread( void* x )
 
 static void client_proc(void)
 {
+	static const unsigned one = 1, two = 2, three = 3;
 	pthread_t thread1 = 0, thread2 = 0, thread3 = 0;
-	int door;
 
 	door = door_open("/tmp/door1");
 	if ( 0 > door )
@@ -93,17 +95,17 @@ static void client_proc(void)
 	start_time = time(NULL);
 
 	if ( 0 !=
-pthread_create( &thread3, NULL, spawn_thread, &door )
+pthread_create( &thread3, NULL, spawn_thread, (void*)&three )
 	   )
 		perror("pthread_create thread3");
 
 	if ( 0 !=
-pthread_create( &thread2, NULL, spawn_thread, &door )
+pthread_create( &thread2, NULL, spawn_thread, (void*)&two )
 	   )
 		perror("pthread_create thread2");
 
 	if ( 0 !=
-pthread_create( &thread1, NULL, spawn_thread, &door )
+pthread_create( &thread1, NULL, spawn_thread, (void*)&one )
 	   )
 		perror("pthread_create thread1");
 
