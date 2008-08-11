@@ -1,7 +1,6 @@
 /***************************************************************************
  * Portland Doors                                                          *
- * door_server.c: Server data structures and functions requiring           *
- *                knowledge thereof.                                       *
+ * door.c:  The Portland Doors implementation of the Doors library.        *
  *                                                                         *
  * Released under the LGPL version 3 (see COPYING).  Copyright (C) 2008    *
  * Loren B. Davis.  Based on work by Jason Lango.                          *
