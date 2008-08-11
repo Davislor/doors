@@ -43,7 +43,7 @@ static const size_t open_default = 1024U;
 static size_t page_size = 0;
 
 /* Several functions manipulate the door_table, which is an array of 
- * OPEN_MAX door_data structures.  A file descriptor fd refers to a 
+ * OPEN_MAX fd_data structures.  A file descriptor fd refers to a 
  * valid, local door if and only if door_table[fd] holds valid data.
  *
  * The program allocates memory for the door_table upon the first call 
@@ -52,6 +52,17 @@ static size_t page_size = 0;
  * fork() causes the child to close all local door descriptors, free 
  * the table's storage, and set door_table to NULL.
  */
+
+enum fd_type {
+	fd_none = 0;		/* This is not a door descriptor at all. */
+	fd_server;		/* Returned by door_create() */
+	fd_client;		/* Returned by door_open() */
+};
+
+struct fd_data {
+	enum fd_type type;	/* The type of data. */
+	void* data;		/* A pointer to the data, or NULL. */
+};
 
 struct door_data {
 	pid_t		target;			/* Server PID */
@@ -75,6 +86,10 @@ struct door_data {
 	pthread_cond_t	can_listen;	/* Has this thread been bound? */
 	pthread_mutex_t	lock_data;	/* Own to modify this structure. */
 };
+
+struct conn_data {
+	pthread_mutex_t	desc_lock	/* A mutex lock on this descriptor. */
+}
 
 /* The door table is an array of pointers to door_data structures.  A
  * non-NULL value of door_table[d] means that d is a local door with
