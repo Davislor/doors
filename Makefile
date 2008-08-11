@@ -38,6 +38,7 @@ PROGRAMS = 	test/error1		\
 		test/get_unique_id	\
 		test/client-server2	\
 		test/client-server3	\
+		test/client-server4	\
 		test/door_call1		\
 		test/sun2		\
 		test/unref1		\
@@ -118,6 +119,10 @@ test/client-server2: test/client-server2.o libdoor.a
 test/client-server3: test/client-server3.o libdoor.a
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
 -o test/client-server3 test/client-server3.o libdoor.a
+
+test/client-server4: test/client-server4.o libdoor.a
+	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \
+-o test/client-server4 test/client-server4.o libdoor.a
 
 test/door_call1: test/door_call1.o libdoor.a
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(LDFLAGS) $(LIBS) \

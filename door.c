@@ -1317,8 +1317,11 @@ int door_call( int door, door_arg_t* params )
 			msg_door_call_init( &outgoing, 0 );
 			send( door, &outgoing, sizeof(outgoing), MSG_EOR );
 		}
-		else
+		else {
 			unlock_door_table();
+			errno = EBADF;
+			return ERROR;
+		}
 	}
 	else {
 /* Within this block, we know that params != NULL. */
@@ -1397,7 +1400,7 @@ int door_call( int door, door_arg_t* params )
 			fatal_system_error(__FILE__,
 			                   __LINE__,
 			                   "mutex unlock"
-		                                 );
+		                          );
 		}
 		return ERROR;
 	}
