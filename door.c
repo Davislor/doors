@@ -1299,11 +1299,26 @@ int door_call( int door, door_arg_t* params )
 	static const int ERROR = -1, SUCCESS = 0;
 	struct msg_door_call outgoing;
 	long long int incoming_code;
+	pthread_mutex_t* lock = NULL;
 
 	if ( NULL == params || 0 == params->data_size ) {
 /* There are no parameters. */
-		msg_door_call_init( &outgoing, 0 );
-		send( door, &outgoing, sizeof(outgoing), MSG_EOR );
+		lock_door_table();
+
+		if ( fd_client == door_table[door].type ) {
+/* A non-local door. */
+			lock =
+& ( (struct conn_data*)door_table[door].data )->desc_lock;
+			unlock_door_table();
+
+			if ( 0 != pthread_mutex_lock(lock) )
+				fatal_system_error(__FILE__,__LINE__,"mutex lock");
+
+			msg_door_call_init( &outgoing, 0 );
+			send( door, &outgoing, sizeof(outgoing), MSG_EOR );
+		}
+		else
+			unlock_door_table();
 	}
 	else {
 /* Within this block, we know that params != NULL. */
@@ -1333,12 +1348,19 @@ int door_call( int door, door_arg_t* params )
 			errno = ENFILE;
 			return ERROR;
 		}
-		else {
-/* The caller has data to pass in, and that data is in a non-NULL
- * buffer.
- */
+
+		lock_door_table();
+		if ( fd_client == door_table[door].type ) {
+/* A non-local door. */
 			struct iovec send_iovs[2];
 			struct msghdr send_hdr;
+
+			lock =
+& ( (struct conn_data*)door_table[door].data )->desc_lock;
+			unlock_door_table();
+
+			if ( 0 != pthread_mutex_lock(lock) )
+				fatal_system_error(__FILE__,__LINE__,"mutex lock");
 
 			bzero( &send_iovs[0], 2*sizeof(struct iovec) );
 			bzero( &send_hdr, sizeof(send_hdr) );
@@ -1348,7 +1370,7 @@ int door_call( int door, door_arg_t* params )
 
 			send_iovs[0].iov_base = &outgoing;
 			send_iovs[0].iov_len = sizeof(outgoing);
-
+		
 			send_iovs[1].iov_base = (void*)params->data_ptr;
 			send_iovs[1].iov_len = params->data_size;
 
@@ -1357,23 +1379,51 @@ int door_call( int door, door_arg_t* params )
 			                  );
 
 			sendmsg( door, &send_hdr, MSG_EOR );
-		} /* end if (Passed in any descriptors?) */
+		}
+		else {
+/* A local door, or not a door at all. */
+			unlock_door_table();
+			errno = EBADF;
+			return ERROR;
+		} /* end if (non-local door) */
 	} /* end if (Passed in any params?) */
-/* We've now sent the message, and await a msg_door_return in reply. */
+/* We've now sent the message, and await a msg_door_return in reply.  The door
+ * descriptor's mutex is locked.
+ */
 
 	incoming_code = message_type(door);
-	if ( 0 > incoming_code )
+	if ( 0 > incoming_code ) {
+		if ( 0 != pthread_mutex_unlock(lock) ) {
+			fatal_system_error(__FILE__,
+			                   __LINE__,
+			                   "mutex unlock"
+		                                 );
+		}
 		return ERROR;
+	}
 	else if ( code_error == incoming_code ) {
 /* We received an error message back. */
 		struct msg_error incoming;
 
 		if (
 0 > recv( door, &incoming, sizeof(incoming), MSG_WAITALL )
-		   )
+		   ) {
+			if ( 0 != pthread_mutex_unlock(lock) ) {
+				fatal_system_error(__FILE__,
+				                   __LINE__,
+				                   "mutex unlock"
+		        	                  );
+			}
 			return ERROR;
+		}
 
 		errno = msg_error_decode(&incoming);
+		if ( 0 != pthread_mutex_unlock(lock) ) {
+			fatal_system_error(__FILE__,
+			                   __LINE__,
+			                   "mutex unlock"
+			                  );
+		}
 		return ERROR;
 	} /* end if ( code_error == incoming_code ) */
 	else if ( code_door_return == incoming_code ) {
@@ -1387,23 +1437,48 @@ int door_call( int door, door_arg_t* params )
 
 		if (
 0 > recv( door, &incoming, sizeof(incoming), MSG_PEEK ) 
-		   )
+		   ) {
+			if ( 0 != pthread_mutex_unlock(lock) ) {
+				fatal_system_error(__FILE__,
+				                   __LINE__,
+				                   "mutex unlock"
+		                                  );
+			}
 			return ERROR;
+		}
 
 		return_size = msg_door_return_get_data_size(&incoming);
 
 		if ( NULL == params ) {
 /* We cannot receive any data. */
 			if ( 0 != return_size ) {
+				if ( 0 != pthread_mutex_unlock(lock) ) {
+					fatal_system_error(__FILE__,
+					                   __LINE__,
+					                   "mutex unlock"
+					                  );
+				}
 				errno = ENOMEM;
 				return ERROR;
 			} /* end if ( 0 != return_size ) */
 
+			if ( 0 != pthread_mutex_unlock(lock) ) {
+				fatal_system_error(__FILE__,
+				                   __LINE__,
+				                   "mutex unlock"
+				                  );
+			}
 			return SUCCESS;
 		} /* end if ( NULL == params ) */
 
 		if ( 0 > return_size ) {
 /* The door returned too much data for us to even address! */
+			if ( 0 != pthread_mutex_unlock(lock) ) {
+				fatal_system_error(__FILE__,
+				                   __LINE__,
+				                   "mutex unlock"
+				                  );
+			}
 			errno = ENOMEM;
 			params->data_size = 0;
 			return ERROR;
@@ -1416,6 +1491,12 @@ int door_call( int door, door_arg_t* params )
 			                          (size_t)return_size
 			                        )
 			   ) {
+				if ( 0 != pthread_mutex_unlock(lock) ) {
+					fatal_system_error(__FILE__,
+					                   __LINE__,
+					                   "mutex unlock"
+					                  );
+				}
 				params->data_size = 0;
 				errno = ENOMEM;
 				return ERROR;
@@ -1450,6 +1531,12 @@ int door_call( int door, door_arg_t* params )
 				free(return_buf);
 
 			params->rsize = 0;
+			if ( 0 != pthread_mutex_unlock(lock) ) {
+				fatal_system_error(__FILE__,
+				                   __LINE__,
+				                   "mutex unlock"
+				                  );
+			}
 			errno = EBADMSG;
 			return ERROR;
 		} /* end if( bytes_read < return_size ) */
@@ -1460,12 +1547,24 @@ int door_call( int door, door_arg_t* params )
 			params->rsize = (size_t)return_size;
 			params->data_size = (size_t)return_size;
 
+			if ( 0 != pthread_mutex_unlock(lock) ) {
+				fatal_system_error(__FILE__,
+				                   __LINE__,
+				                   "mutex unlock"
+				                  );
+			}
 			return SUCCESS;
 		} /* end if ( number of bytes read ). */
 	} /* end if ( type of message received ) */
 
 /* We received the wrong kind of message. */
 	close(door);
+	if ( 0 != pthread_mutex_unlock(lock) ) {
+		fatal_system_error(__FILE__,
+		                   __LINE__,
+		                   "mutex unlock"
+		                  );
+	}
 	errno = EBADMSG;
 	return ERROR;
 }
@@ -1720,21 +1819,49 @@ int door_getparam (int d, int param, size_t* out)
 	if ( NULL == p ) {
 /* Not a local door. */
 		struct msg_request outgoing;
+		pthread_mutex_t* lock = NULL;
 		uint32_t type;
+
+/* FIXME: This breaks dup() and dup2()! */
+		lock_door_table();
+		if ( fd_client != door_table[d].type ) {
+			unlock_door_table();
+			errno = EBADF;
+			return ERROR;
+		}
+		else {
+			lock =
+& ( (struct conn_data*)door_table[d].data )->desc_lock;
+			unlock_door_table();
+		}
+
+		if ( 0 != pthread_mutex_lock(lock) )
+			fatal_system_error(__FILE__,__LINE__,"mutex lock");
 
 		msg_request_init( &outgoing, param );
 		send( d, &outgoing, sizeof(outgoing), MSG_EOR );
 
-		if ( 0 > recv( d, &type, sizeof(type), MSG_PEEK ) )
+		if ( 0 > recv( d, &type, sizeof(type), MSG_PEEK ) ) {
+			if ( 0 != pthread_mutex_unlock(lock) )
+				fatal_system_error(__FILE__,__LINE__,"mutex unlock");
+
 			return ERROR;
+		}
 
 		if ( code_door_getparam == type ) {
 			struct msg_door_getparam incoming;
 
 			if (
 0 > recv( d, &incoming, sizeof(incoming), 0 )
-			   )
+			   ) {
+				if ( 0 != pthread_mutex_unlock(lock) ) {
+					fatal_system_error(__FILE__,
+					                   __LINE__,
+					                   "mutex unlock"
+					                  );
+				}
 				return ERROR;
+			}
 
 			*out =  msg_door_getparam_decode(&incoming);
 		}
@@ -1743,35 +1870,51 @@ int door_getparam (int d, int param, size_t* out)
 
 			if (
 0 > recv( d, &incoming, sizeof(incoming), 0 )
-			   )
+			   ) {
+				if ( 0 != pthread_mutex_unlock(lock) ) {
+					fatal_system_error(__FILE__,
+					                   __LINE__,
+					                   "mutex unlock"
+					                  );
+				}
 				return ERROR;
+			}
 
 			errno = msg_error_decode(&incoming);
+			if ( 0 != pthread_mutex_unlock(lock) ) {
+				fatal_system_error(__FILE__,
+				                   __LINE__,
+				                   "mutex unlock"
+		                                  );
+			}
 			return ERROR;
 		} /* end if (message type) */
 
+		if ( 0 != pthread_mutex_unlock(lock) )
+			fatal_system_error(__FILE__,__LINE__,"mutex unlock");
+
 		return SUCCESS;
-	}
+	} /* end if ( NULL == p ) */
 
 /* A local door. */
-	switch (param) {
-		case DOOR_PARAM_DATA_MAX:
-			lock_door_data(p);
-			*out = p->data_max;
-			unlock_door_data(p);
-			break;
+		switch (param) {
+			case DOOR_PARAM_DATA_MAX:
+				lock_door_data(p);
+				*out = p->data_max;
+				unlock_door_data(p);
+				break;
 
-		case DOOR_PARAM_DATA_MIN:
-			lock_door_data(p);
-			*out = p->data_min;
-			unlock_door_data(p);
-			break;
+			case DOOR_PARAM_DATA_MIN:
+				lock_door_data(p);
+				*out = p->data_min;
+				unlock_door_data(p);
+				break;
 
-		case DOOR_PARAM_DESC_MAX:
-			*out = 0;
-			break;
+			case DOOR_PARAM_DESC_MAX:
+				*out = 0;
+				break;
+		} /* end switch */
 /* We already tested that param is one of those three. */
- 	}
 
 	return SUCCESS;
 }
@@ -1795,12 +1938,36 @@ int door_info( int d, struct door_info* info )
 
 	if ( NULL == p ) {
 /* Not a local door. */
+		pthread_mutex_t* lock = NULL;
 		struct msg_request outgoing;
 		long long int code;
 
-		msg_request_init( &outgoing, REQ_DOOR_INFO );
-		if ( 0 > send( d, &outgoing, sizeof(outgoing), MSG_EOR ) )
+/* FIXME: This breaks dup() and dup2()! */
+		lock_door_table();
+		if ( fd_client != door_table[d].type ) {
+			unlock_door_table();
+			errno = EBADF;
 			return ERROR;
+		}
+		else {
+			lock =
+& ( (struct conn_data*)door_table[d].data )->desc_lock;
+			unlock_door_table();
+		}
+
+		if ( 0 != pthread_mutex_lock(lock) )
+			fatal_system_error(__FILE__,__LINE__,"mutex lock");
+
+		msg_request_init( &outgoing, REQ_DOOR_INFO );
+		if ( 0 > send( d, &outgoing, sizeof(outgoing), MSG_EOR ) ) {
+			if ( 0 != pthread_mutex_unlock(lock) ) {
+				fatal_system_error(__FILE__,
+				                   __LINE__,
+				                   "mutex unlock"
+		                                  );
+			}
+			return ERROR;
+		}
 
 		code = message_type(d);
 
@@ -1809,13 +1976,28 @@ int door_info( int d, struct door_info* info )
 
 			if (
 0 > recv( d, &incoming, sizeof(incoming), 0 )
-			   )
-				return EBADMSG;
+			   ) {
+				if ( 0 != pthread_mutex_unlock(lock) ) {
+					fatal_system_error(__FILE__,
+					                   __LINE__,
+					                   "mutex unlock"
+		                	                  );
+				}
+				errno = EBADMSG;
+				return ERROR;
+			}
 
 			msg_door_info_decode( &incoming, info );
 
 			if ( getpid() == (pid_t)info->di_target )
 				info->di_attributes |= DOOR_LOCAL;
+
+			if ( 0 != pthread_mutex_unlock(lock) ) {
+				fatal_system_error(__FILE__,
+				                   __LINE__,
+				                   "mutex unlock"
+		               	                  );
+			}
 
 			return SUCCESS;
 		}
@@ -1824,13 +2006,34 @@ int door_info( int d, struct door_info* info )
 
 			if (
 0 > recv( d, &incoming, sizeof(incoming), 0 )
-			   )
-				return EBADMSG;
+			   ) {
+				if ( 0 != pthread_mutex_unlock(lock) ) {
+					fatal_system_error(__FILE__,
+					                   __LINE__,
+					                   "mutex unlock"
+		  	                                );
+				}
+				errno = EBADMSG;
+				return ERROR;
+			}
 
 			errno = msg_error_decode(&incoming);
+			if ( 0 != pthread_mutex_unlock(lock) ) {
+				fatal_system_error(__FILE__,
+				                   __LINE__,
+				                   "mutex unlock"
+		                                  );
+			}
 			return ERROR;
 		}
 		else {
+			if ( 0 != pthread_mutex_unlock(lock) ) {
+				fatal_system_error(__FILE__,
+				                   __LINE__,
+				                   "mutex unlock"
+		                                  );
+			}
+
 			errno = EBADF;
 			return ERROR;
 		}
