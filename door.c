@@ -2136,9 +2136,9 @@ pthread_mutex_init( & ( (struct conn_data*)door_table[d].data )->desc_lock,
 	return d;
 }
 
-int door_return( void* restrict data_ptr,
+int door_return( const void* restrict data_ptr,
                  size_t data_size,
-                 door_desc_t* restrict desc_ptr,
+                 const door_desc_t* restrict desc_ptr,
                  uint_t num_desc
                )
 /* See the SunOS 5.11 man page for a specification for how the function

@@ -119,10 +119,10 @@ extern int door_call( int d, door_arg_t* params );
  * suppress compiler warnings, just cast to (door_server_proc_t).
  */
 typedef void (*door_server_proc_t)( void* restrict		cookie,
-                                      const void* restrict	argp,
-                                      size_t			arg_size,
-                                      const door_desc_t* restrict	dp,
-                                      uint_t			n_desc
+                                    const void* restrict	argp,
+                                    size_t			arg_size,
+                                    const door_desc_t* restrict	dp,
+                                    uint_t			n_desc
                                   );
 /* For consistency with _door_thread_proc: */
 typedef door_server_proc_t	_door_server_proc;
@@ -147,9 +147,9 @@ extern int door_info( int d, struct door_info* info );
 extern int door_tcred( door_tcred_t* info );
 
 /* Currently unimplemented. */
-extern int door_return( void* restrict data_ptr,
+extern int door_return( const void* restrict data_ptr,
                         size_t data_size,
-                        door_desc_t* restrict desc_ptr,
+                        const door_desc_t* restrict desc_ptr,
                         uint_t num_desc
                       );
 
