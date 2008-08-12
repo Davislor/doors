@@ -2192,7 +2192,7 @@ int door_return( const void* restrict data_ptr,
 	send_iovs[0].iov_base = &outgoing;
 	send_iovs[0].iov_len = sizeof(outgoing);
 
-	send_iovs[1].iov_base = data_ptr;
+	send_iovs[1].iov_base = (void*)data_ptr;
 	send_iovs[1].iov_len = data_size;
 
 	if ( 0 > sendmsg( fd, &send_hdr, MSG_EOR ) ) {
