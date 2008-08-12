@@ -68,7 +68,7 @@ static void* spawn_thread( void* x )
 	args.rbuf = &retval;
 	args.rsize = sizeof(retval);
 
-	printf("Called a door.\n");
+	printf( "Called door %u.\n", retval );
 
 	if ( 0 != door_call( door, &args ) )
 		perror("door_call");
