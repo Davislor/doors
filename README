@@ -1,0 +1,48 @@
+Portland Doors is Copyright (C) 2008 Loren B. Davis.  All rights 
+reserved.  It is released under the GNU LGPL version 3 (see COPYING) and 
+provided with NO WARRANTY.
+
+Known Bugs, Limitations and Incompatibilities for version Alpha:
+
+ - The fattach() and fdetach() functions are not implemented.
+REASON:		Some UNIX and UNIX-like systems, such as Linux, do not support them.
+WORKAROUND:	Use the replacements door_attach() and door_detach() instead.  There is also a reentrant version of door_attach(), door_attach_r(), which is thread-safe if you are alert to a potential race condition.
+
+	Unlike fattach() and fdetach(), all of these functions require that you NOT create a mount point first.  This means that you must set the file permissions on the mount point after, not before, calling door_attach().  To avoid a security bug, door_attach() therefore creates a file with no permissions set.  You must set the permissions you want on the door yourself, such as with chmod().
+
+	The door_attach_r() function attaches a door with default file permissions, and is thread-safe.  If you try to tighten the permissions after the library call, your application may be vulnerable to a race with another program that attempts to open the door.  Therefore, you should set the umask before calling door_attach_r().
+
+	Code that depends on fattach() masking a file that contains data, and fdetach() revealing the original file, will not work with door_attach() and door_detach().  However, door_detach() does make its best effort to detect this error and not cause data loss.
+
+ - The open() and close() functions do not work properly on doors.
+REASON:		Modifying these standard library calls to recognize a door and allocate the proper data structures would be difficult and non-portable.
+WORKARIOUND:	Use the replacements door_open() and door_close() instead.  Note that door_open() has only one argument, the pathname.
+
+ - The dup() function and its ilk do not work properly on doors.
+REASON:		These functions do not know about the library's private data structures.
+WORKAROUND:	Create new door descriptors with door_create() or door_open().
+
+ - The library does not yet support file descriptor passing, private server threads, cancellable doors, credentials, custom server thread creation procedures, the DOOR_PRIVATE flag or the DOOR_NO_CANCEL flag.
+REASON:		I haven't gotten to these yet.
+WORKAROUND:	Don't use these features.
+
+ - Pointers to the the data and results buffers are declared as void* rather than char*, as in Sun's implementations.  They now have the restrict qualifier in C99 environments.
+REASON:		This simplifies working with data types other than strings.
+WORKAROUND:	Existing code should generally work.  If the compiler complains that the first argument of door_create() has the wrong type, you can cast it to door_server_proc_t.  If you need to access the members of a door_arg_t as pointers to char and not void, use a cast.
+
+ - Pointers to the data buffer now have the const qualifier.
+REASON:		This allows you to pass in constant arguments by reference.  Furthermore, incoming buffers could, in the near future, be unsafe or very inefficient to modify.
+WORKAROUND:	If you're certain that modifying the argument data is safe, cast its pointer to a non-constant, non-void pointer of the appropriate type.  This is unsupported!  At the moment, the server procedure will still work with no changes, but you may need to cast the first argument of door_return() to door_server_proc_t to suppress a compiler warning.
+
+ - Door flags consistently have the type door_attr_t, not uint_t.
+REASON:		Currently, both of these types are aliases for unsigned int, and probably will remain so.  If we ever need to break this symmetry (for example, because we've added more than 16 flags and need to support a 16-bit environment), then door_attr_t and not uint_t is the appropriate type to use.
+WORKAROUND:	None needed.  Existing code will work.
+
+ - Sun says that door_call() might allocate a new buffer if the one you provide is not large enough, and that you should free such a buffer with munmap().  This implementation of the library makes explicit: it does NOT guarantee that it will re-use any buffer that is large enough.  Furthermore, you should free such a buffer with free() instead.
+REASON:		This clears up an ambiguity in the specification, and gives the library more flexibility to optimize.
+WORKAROUND:	If your original buffer needs to be freed, keep an alias around and compare it to rbuf on return.  This implementation uses posix_memalign to allocate the new buffer, so munmap() should still work.
+
+ - The library is not as fast as it could be.
+REASON:		It's a work in progress.
+WORKAROUND:	Send me your patches!
+
