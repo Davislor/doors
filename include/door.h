@@ -201,6 +201,20 @@ extern int door_attach( int d, const char* path );
 
 extern int door_detach( const char* path );
 
+/* In POSIX, all non-reentrant functions have a reentrant counterpart, with
+ * _r appended.  For consistency, the library therefore provides
+ * door_attach_r().  It attaches the door to the specified pathname, which
+ * must not refer to an existing file.
+ *
+ * The difference between door_attach_r() and door_attach() is that
+ * door_attach creates a door with no file permissions set, whereas
+ * door_attach_r() creates a door with default file permissions according to
+ * the current umask.  It is safer to use door_attach(), but there might be
+ * some cases where you may need door_attach_r() instead (for instance, you
+ * create doors in several parallel threads).
+ */
+extern int door_attach_r( int d, const char* path );
+
 /* In this implementation, the open() system call doesn't do the right
  * thing with doors (which are sockets).  I therefore provide
  * door_open() as a replacement for open.  It does not have any flags 

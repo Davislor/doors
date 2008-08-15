@@ -1251,6 +1251,83 @@ int door_attach( int d, const char* path )
 	return SUCCESS;
 }
 
+int door_attach_r( int d, const char* path )
+/* A reentrant alternative to door_attach().  This version creates a door with
+ * permissions set according to the current umask.  Normally, door_attach() is
+ * safer, but you may need to use this, avoiding races between this process
+ * setting the file permissions and another process opening the door, for
+ * thread-safety.
+ */
+{
+	static const int SUCCESS = 0, ERROR = -1;
+
+	size_t path_len;
+	struct sockaddr_un address;
+	struct door_data* p;
+
+	if ( NULL == path ) {
+		errno = EINVAL;
+		return ERROR;
+	}
+
+/* Implementations are allowed to do some tricky things with the 
+ * sun_path array, but this code should work portably:
+ */
+	path_len = strlen(path);
+
+	if ( path_len >= sizeof(address.sun_path) ) {
+		errno = ENAMETOOLONG;
+		return ERROR;
+	}
+
+	address.sun_family = AF_UNIX;
+
+/* Using memcpy and an explicit terminator are redundant, individually
+ * and together, unless the data change from under us.  In that case,
+ * we're already in a state of mortal sin.  I do it anyway, as the cost
+ * is well worth making a buffer overrun impossible.
+ */
+	memcpy( address.sun_path, path, path_len );
+	address.sun_path[path_len] = '\0';
+
+	if ( 0 != bind( d,
+	                (const struct sockaddr*)&address,
+	                offsetof( struct sockaddr_un, sun_path ) + path_len
+	              )
+	   ) {
+		return ERROR;
+	}
+
+	if ( 0 != listen( d, SOMAXCONN ) )
+		return ERROR;
+
+	p = local_door_data(d);
+
+	if ( NULL == p ) {
+		errno = EBADF;
+		return ERROR;
+	}
+
+/* Now, we can tell the listening thread to listen.  The POSIX standard tells
+ * us to own this mutex when we call pthread_cond_signal() if we want 
+ * "predictable scheduling behavior."
+ */
+	lock_door_data(p);
+
+/* If door_bind() is implemented, there may be more than one listener thread.
+ * The pthreads library requires them to detect if more than one has woken up,
+ * but still, wake up as few unwanted threads as possible.
+ */
+	p->attachments = true;	/* Should change this to a reference count. */
+
+	if ( 0 != pthread_cond_signal(&p->can_listen) )
+		fatal_system_error(__FILE__,__LINE__,"pthread_cond_signal");
+
+	unlock_door_data(p);
+
+	return SUCCESS;
+}
+
 int door_call( int door, door_arg_t* params )
 /* See the SunOS 5.11 manual for a specification of how this function
  * should work.
