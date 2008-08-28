@@ -17,4 +17,4 @@ test/unref1
 test/unref2
 .libs
 .dotest
-
+install

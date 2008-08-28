@@ -2,8 +2,8 @@
 # Copyright (C) 2008 Loren B. Davis.
 # Released under the LGPL, version 3.  See COPYING.
 
-VERSION = 001
-PACKAGE = portland_doors
+VERSION = 1.0.0
+PACKAGE = portland-doors
 
 CROSS_COMPILE ?=
 CC = $(CROSS_COMPILE)gcc
@@ -24,13 +24,14 @@ CFLAGS		+= $(WARNINGS)
 CFLAGS		+= $(IFLAGS)
 LDFLAGS		+= -Wl,-warn-common,--as-needed
 
-INSTALLPATH	= /usr/local/lib
+PREFIX		= /usr/local
+# PREFIX	= /usr
+LIBPATH		= $(PREFIX)/lib
+HEADERPATH	= $(PREFIX)/include
 
 # On GCC, set CFLAGS to include -std=c99 -m64 -Wall -pedantic
 # On Linux, set LIBS to -pthread
 # On Solaris, set LIBS to -lpthread -lsocket
-
-# what are the actual library files here?
 
 PROGRAMS = 	test/error1		\
 		test/localserver1	\
@@ -67,6 +68,14 @@ export E Q
 
 all: $(PROGRAMS)
 
+install: include/door.h libdoor.so libdoor.a
+	install -c libdoor.so $(LIBPATH)/libdoor.so.$(VERSION)
+	ln -fs $(LIBPATH)/libdoor.so.$(VERSION) $(LIBPATH)/libdoor.so
+	ln -fs $(LIBPATH)/libdoor.so.$(VERSION) $(LIBPATH)/libdoor.so.1
+	install -c libdoor.a $(LIBPATH)/libdoor.a
+	install -c include/door.h $(HEADERPATH)/door.h
+	touch install
+
 # build the objects
 %.o: %.c $(HEADERS)
 	$(E) "  CC	" $@
@@ -82,6 +91,12 @@ libdoor.a: $(DOOR_OBJS)
 	$(Q) $(AR) cq $@ $(DOOR_OBJS)
 	$(E) "  RANLIB  " $@
 	$(Q) $(RANLIB) $@
+
+libdoor.so: door.lo
+	libtool --mode=link $(CC) $(CFLAGS) $(DEBUGFLAGS) -o libdoor.so door.lo -shared -dynamic -rpath $(LIBPATH)
+
+door.lo: door.c include/door.h include/standards.h include/error.h include/messages.h
+	libtool --mode=compile $(CC) $(CFLAGS) $(DEBUGFLAGS) -c door.c
 
 test/get_unique_id: test/get_unique_id.o libdoor.a
 	$(E) "  CC	" $@
@@ -144,7 +159,7 @@ test/client-server1: test/client-server1.o libdoor.a
 clean:
 	$(E) "  CLEAN"
 	$(Q) -rm -f *.o test/*.o $(PROGRAMS) $(DOOR_OBJS) $(OBJS) \
-libdoor.la libdoor.a
+libdoor.la libdoor.a libdoor.so* *.lo .libs/* install
 .PHONY: clean
 
 release:
@@ -154,5 +169,5 @@ release:
 	# git commit -a -m "release $(VERSION)"
 	# cat .git/refs/heads/master > .git/refs/tags/$(VERSION)
 	@ echo
-	git-archive --format=tar --prefix=$(PACKAGE)-$(VERSION)/ HEAD | gzip -9v > $(PACKAGE)-$(VERSION).tar.gz
+	git-archive --format=tar --prefix=$(PACKAGE)-$(VERSION)/ HEAD | gzip -a -v --best > $(PACKAGE)-$(VERSION).tar.gz
 .PHONY: release
