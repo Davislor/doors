@@ -2,7 +2,7 @@
 # Copyright (C) 2008 Loren B. Davis.
 # Released under the LGPL, version 3.  See COPYING.
 
-VERSION = 1.0.0
+VERSION = 1.0.1
 PACKAGE = portland-doors
 
 CROSS_COMPILE ?=
