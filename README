@@ -13,7 +13,7 @@ Portland Doors is Copyright (C) 2008 Loren B. Davis.  All rights
 reserved.  It is released under the GNU LGPL version 3 (see COPYING) and 
 provided with NO WARRANTY.
 
-Known Bugs, Limitations and Incompatibilities for version Alpha:
+Known Bugs, Limitations and Incompatibilities for version 1.0.1:
 
  - The fattach() and fdetach() functions are not implemented.
 REASON:		Some UNIX and UNIX-like systems, such as Linux, 
